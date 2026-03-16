@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'map_app'
 ]
 
 MIDDLEWARE = [
@@ -76,9 +77,9 @@ DATABASES = {
     # TODO
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'my_project_db',
-        'USER': 'db_user',
-        'PASSWORD': 'your_password',
+        'NAME': 'tourist_map_db',
+        'USER': 'postgres',
+        'PASSWORD': '12345',
         'HOST': 'localhost',
         'PORT': '5432',
     }
