@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 
 # Create your models here.
 class City(models.Model):
-    """"""
+    """Город"""
     name = models.CharField(max_length = 100)
     description = models.TextField()
 
@@ -18,6 +18,7 @@ class Tag(models.Model):
         return self.name
 
 class Place(models.Model):
+    """Место (достопримечательность)"""
     name = models.CharField(max_length = 100)
     description = models.TextField()
     category = models.ForeignKey('Category',on_delete=models.PROTECT)
@@ -31,6 +32,7 @@ class Place(models.Model):
     external_id = models.CharField(max_length = 100, unique=True, null=True)
     rating = models.FloatField(default = 0)
 
+    # прочая информация о месте
     working_hours = models.JSONField(null=True)
     website = models.URLField(null=True)
 
@@ -45,6 +47,7 @@ class Place(models.Model):
         return self.name
 
 class Category(models.Model):
+    """Категория достопримечательности (музей, театр, памятник, парк и т.д)"""
     name = models.CharField(max_length = 100)
     slug = models.SlugField(unique=True, max_length = 100)
     icon_name = models.CharField(max_length = 100)
