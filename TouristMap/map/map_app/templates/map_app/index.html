@@ -1,6 +1,35 @@
-<!DOCTYPE html>
-<html lang="en">
-    {% extends "base_generic.html" %}
-    {% block header %}Главная страница{% endblock header %}
-    {% block content %}Связка шаблонов index.html и base.html{% endblock content %}
-</html>
+{% extends "base_generic.html" %}
+
+{% block content %}
+<main class="p-3">
+    <div id="app" style="width: 600px; height: 400px"></div>
+</main>
+
+<script
+      data-plugins="transform-modules-umd"
+      data-presets="typescript"
+      type="text/babel"
+      src="../variables.ts"
+    ></script>
+    <script data-plugins="transform-modules-umd" data-presets="typescript" type="text/babel">
+      import {LOCATION} from '../variables';
+
+      window.map = null;
+
+      main();
+      async function main() {
+        // Waiting for all api elements to be loaded
+        await ymaps3.ready;
+        const {YMap, YMapDefaultSchemeLayer} = ymaps3;
+        // Initialize the map
+        map = new YMap(
+          // Pass the link to the HTMLElement of the container
+          document.getElementById('app'),
+          // Pass the map initialization parameters
+          {location: LOCATION, showScaleInCopyrights: true},
+          // Add a map scheme layer
+          [new YMapDefaultSchemeLayer({})]
+        );
+      }
+    </script>
+{% endblock %}
