@@ -1,5 +1,6 @@
 from django.contrib.gis.db import models
 from django.contrib.auth.models import User
+from django.urls import reverse
 
 # Create your models here.
 class City(models.Model):
@@ -45,6 +46,10 @@ class Place(models.Model):
         ]
     def __str__(self):
         return self.name
+
+    def get_absolute_url(self):
+        # Возвращает URL-aдpec для доступа к определенному экземпляру книги.
+        return reverse('book-detail', args=[str(self.id)])
 
 class Category(models.Model):
     """Категория достопримечательности (музей, театр, памятник, парк и т.д)"""

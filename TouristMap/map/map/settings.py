@@ -125,6 +125,8 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+SESSION_SAVE_EVERY_REQUEST = True
+
 OSGEO4W_ROOT = r'C:\Users\kosty\AppData\Local\Programs\OSGeo4W'
 os.environ['PATH'] = os.path.join(OSGEO4W_ROOT, 'bin') + os.pathsep + os.environ['PATH']
 GDAL_LIBRARY_PATH = os.path.join(OSGEO4W_ROOT, 'bin', 'gdal312.dll')
