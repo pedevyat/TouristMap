@@ -5,31 +5,29 @@
     <div id="app" style="width: 600px; height: 400px"></div>
 </main>
 
-<script
-      data-plugins="transform-modules-umd"
-      data-presets="typescript"
-      type="text/babel"
-      src="../variables.ts"
-    ></script>
-    <script data-plugins="transform-modules-umd" data-presets="typescript" type="text/babel">
-      import {LOCATION} from '../variables';
-
-      window.map = null;
-
-      main();
-      async function main() {
-        // Waiting for all api elements to be loaded
-        await ymaps3.ready;
-        const {YMap, YMapDefaultSchemeLayer} = ymaps3;
-        // Initialize the map
-        map = new YMap(
-          // Pass the link to the HTMLElement of the container
-          document.getElementById('app'),
-          // Pass the map initialization parameters
-          {location: LOCATION, showScaleInCopyrights: true},
-          // Add a map scheme layer
-          [new YMapDefaultSchemeLayer({})]
-        );
-      }
-    </script>
+<script type="text/javascript">
+    const LOCATION = {
+        center: [37.588144, 55.733842],  // Москва (пример)
+        zoom: 10
+    };
+    
+    let map = null;
+    
+    function init() {
+        map = new ymaps.Map("app", {
+            center: LOCATION.center,
+            zoom: LOCATION.zoom,
+            controls: ['zoomControl', 'fullscreenControl']
+        });
+        
+        map.setType('yandex#map');
+        map.controls.add('typeSelector');
+        map.controls.add('geolocationControl');
+        window.addEventListener('resize', function() {
+            map.container.fitToViewport();
+        });
+    }
+    
+    ymaps.ready(init);
+</script>
 {% endblock %}
