@@ -20,7 +20,7 @@
                 <div class="sidebar-header p-5 d-flex align-items-center mb-5" id="logo">
                     <a href="/" class="d-flex align-items-center mb-3 mb-md-0 me-md-auto link-dark text-decoration-none">
                         <img src="{% static 'images/logo.png' %}" width="40">
-                        <span class="fs-4">Туристическая карта</span>
+                        <span class="fs-4 px-2">Туристическая карта</span>
                     </a>
                 </div>
                 <ul class="nav nav-pills flex-column gap-4 px-2">
@@ -48,15 +48,20 @@
                     <strong>mdo</strong>
                   </a>
                   <ul class="dropdown-menu text-small shadow" aria-labelledby="dropdownUser2">
-                    <li><a class="dropdown-item" href="#">New project...</a></li>
                     <li><a class="dropdown-item" href="#">Settings</a></li>
                     <li><a class="dropdown-item" href="#">Profile</a></li>
                     <li><hr class="dropdown-divider"></li>
-                    <li><a class="dropdown-item" href="#">Sign out</a></li>
+                    <li>
+                    <form method="post" action="{% url 'logout' %}?next={{ request.path }}" style="display:inline;">
+                      {% csrf_token %}
+                      <button type="submit" style="background:none; border:none; color:#337ab7; text-decoration:underline; cursor:pointer; padding:0; margin:0; font-family:inherit; font-size:inherit;">
+                        Выйти
+                      </button>
+                    </li>
                   </ul>
                 </div>
             {% else %}
-                 <a href="accounts/login" class="p-4 d-flex align-items-center nav-link link-dark">
+                 <a href="{% url 'login' %}?next={{ request.path }}" class="p-4 d-flex align-items-center nav-link link-dark">
                       <span class="ms-2 d-none d-sm-block sidebar-text">Войти</span>
                  </a>
             {% endif %}

@@ -133,6 +133,8 @@ MEDIA_URL = '/media/'
 
 SESSION_SAVE_EVERY_REQUEST = True
 
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
 OSGEO4W_ROOT = r'C:\Users\kosty\AppData\Local\Programs\OSGeo4W'
 os.environ['PATH'] = os.path.join(OSGEO4W_ROOT, 'bin') + os.pathsep + os.environ['PATH']
 GDAL_LIBRARY_PATH = os.path.join(OSGEO4W_ROOT, 'bin', 'gdal312.dll')
