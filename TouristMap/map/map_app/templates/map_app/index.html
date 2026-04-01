@@ -6,28 +6,29 @@
 </main>
 
 <script type="text/javascript">
-    const LOCATION = {
-        center: [55.733842, 37.588144],  // Москва (пример)
-        zoom: 10
-    };
-    
     let map = null;
-    
+
     function init() {
+        const container = document.getElementById("app");
+        if (!container) return;
         map = new ymaps.Map("app", {
-            center: LOCATION.center,
-            zoom: LOCATION.zoom,
+            center: [55.753994, 37.622093], 
+            zoom: 12,
             controls: ['zoomControl', 'fullscreenControl']
         });
+
+       /* ymaps.search('музеи', {
+            boundedBy: map.getBounds(),
+            strictBounds: false,
+            results: 50
+        }).then(function (res) {
+            map.geoObjects.add(res.getGeoObjects());
+        }).catch(function (err) {
+            console.error("Ошибка поиска:", err);
+        });*/
         
-        map.setType('yandex#map');
-        map.controls.add('typeSelector');
-        map.controls.add('geolocationControl');
-        window.addEventListener('resize', function() {
-            map.container.fitToViewport();
-        });
+        window.addEventListener('resize', () => map.container.fitToViewport());
     }
-    
-    ymaps.ready(init);
+    ymaps.ready(init); 
 </script>
 {% endblock %}
