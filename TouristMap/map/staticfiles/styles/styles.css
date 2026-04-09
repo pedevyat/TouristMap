@@ -39,7 +39,6 @@ body {
     padding-right: 0;
 }
 
-
 @media (width <= 576px) {
     .sidebar {
         width: 80px;
