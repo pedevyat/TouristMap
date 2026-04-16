@@ -26,13 +26,40 @@
         </li>
       </ul>
     </div>
-
-    <div class="p-4 border-top"> <router-link v-if="!user" to="/login" class="nav-link link-dark d-flex align-items-center">
+    <div class="p-4 border-top">
+      <router-link v-if="!username" to="/login" class="nav-link link-dark d-flex align-items-center">
         <strong>Войти</strong>
       </router-link>
+
+      <div v-else class="d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center">
+          <span class="nav-link link-dark">{{ username }}</span>
+        </div>
+        <button @click="logout" class="btn btn-sm btn-outline-danger border-0">
+             Выйти
+        </button>
+      </div>
     </div>
   </aside>
 </template>
+
+<script setup>
+  import { ref, onMounted } from 'vue';
+  import { useRouter } from 'vue-router';
+
+  const router = useRouter();
+  const username = ref(null);
+
+  onMounted(() => {
+    username.value = localStorage.getItem('username');
+  });
+
+  const logout = () => {
+    localStorage.removeItem('username');
+    username.value = null;
+    router.push('/');
+  };
+</script>
 
 <style scoped>
 .sidebar {

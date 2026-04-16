@@ -10,7 +10,7 @@ onMounted(() => {
     const myMap = new ymaps.Map("map", {
       center: [55.76, 37.64], // Москва
       zoom: 10,
-      controls: ['zoomControl', 'typeSelector', 'fullscreenControl']
+      controls: ['zoomControl', 'typeSelector']
     });
     
     // TODO
