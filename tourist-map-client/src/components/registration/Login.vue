@@ -47,7 +47,9 @@
       </form>
 
       <div class="mt-3 text-center">
-        <router-link to="/password-reset" class="text-decoration-none">Утерян пароль?</router-link>
+        <a href="http://127.0.0.1:8000/accounts/password_reset/" class="text-decoration-none">
+          Утерян пароль?
+        </a>
       </div>
     </div>
   </div>
