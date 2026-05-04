@@ -100,8 +100,9 @@ const handleLogin = async () => {
     
    if (response.data.status === 'ok') {
       localStorage.setItem('username', response.data.username);
-      router.push('/');
-      location.reload();
+      router.push({ name: 'home' }).then(() => {
+        location.reload();
+      });
     }
   } catch (err) {
     console.error(err.response);

@@ -8,9 +8,9 @@ const routes = [
     component: MapView
   },
   {
-  path: '/login',
-  name: 'login',
-  component: () => import('@/components/registration/Login.vue')
+    path: '/login',
+    name: 'login',
+    component: () => import('@/components/registration/Login.vue')
   }
 ]
 

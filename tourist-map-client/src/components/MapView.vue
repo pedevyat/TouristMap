@@ -15,13 +15,12 @@ async function loadPlacesFromWikidata(classQID) {
       ?place wdt:P31/wdt:P279* ?type.
     `;
   } else if (classQID === 'Q862454') {
-    // НАБЕРЕЖНЫЕ
+    // НАБЕРЕЖНЫЕ (пока не выводит)
     categoryFilter = `
       {
         # Поиск по классам + ключевое слово
-        VALUES ?type { wd:Q862454 wd:Q15631416 wd:Q204227 }
+        VALUES ?type { wd:Q862454 wd:Q15631416 wd:Q3840711 }
         ?place wdt:P31/wdt:P279* ?type.
-        FILTER(CONTAINS(LCASE(?placeLabel), "набережная") || CONTAINS(LCASE(?placeLabel), "embankment"))
       }
     `;
   } else if (classQID === 'Q33506') {
@@ -38,7 +37,7 @@ async function loadPlacesFromWikidata(classQID) {
     SELECT DISTINCT ?place ?placeLabel ?coord ?image WHERE {
       ${categoryFilter}
       
-      ?place wdt:P131* wd:Q3573. 
+      ?place wdt:P131* wd:Q159. 
       
       ?place wdt:P625 ?coord.
       OPTIONAL { ?place wdt:P18 ?image. }
