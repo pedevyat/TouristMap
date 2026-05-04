@@ -1,12 +1,12 @@
 <template>
   <div class="container mt-4 text-dark">
-    <h2 class="mb-4 text-black fw-bold">Избранное</h2>
+    <h2 class="mb-4 text-black fw-bold">Отмеченные места</h2>
     
     <div v-if="favorites.length === 0" class="alert alert-light border text-dark">
       Пока ничего не добавили
     </div>
 
-    <div v-else class="table-responsive shadow-sm rounded">
+    <div v-else class="table-responsive rounded">
       <table class="table table-hover align-middle bg-white">
         <thead class="table">
           <tr>
@@ -26,7 +26,7 @@
                    style="width: 60px; height: 45px; object-fit: cover;">
               <div v-else class="bg-light rounded text-muted text-center" 
                    style="width: 60px; height: 45px; font-size: 10px; line-height: 45px;">
-                Нет фото
+                ?
               </div>
             </td>
             <td>
