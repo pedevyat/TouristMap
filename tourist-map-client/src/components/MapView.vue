@@ -91,21 +91,47 @@ onMounted(() => {
       options: { float: 'right', floatIndex: 10 }
     }));
 
+    document.addEventListener('click', (e) => {
+      if (e.target.classList.contains('favorite-star')) {
+        const placeId = e.target.getAttribute('data-id');
+        const allPlaces = [...museums, ...parks, ...embankments];
+        const placeData = allPlaces.find(p => p.place.value === placeId);
+
+        if (placeData) {
+          toggleFavorite(placeData, e.target);
+        }
+      }
+    });
+
     const renderPlaces = (data, collection, iconPreset) => {
+      const favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
       data.forEach(item => {
         const name = item.placeLabel.value;
+        const placeId = item.place.value;
         const match = item.coord.value.match(/Point\(([-0-9.]+) ([-0-9.]+)\)/);
         if (!match) return;
-
-        const html = `<div style="max-width: 200px;">
-          <strong>${name}</strong>
+        const isFav = favorites.some(fav => fav.id === placeId);
+        const starColor = isFav ? '#ffc107' : '#ccc';
+        const html = `
+        <div style="max-width: 200px; position: relative;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <strong style="margin-right: 20px;">${name}</strong>
+            <span class="favorite-star" 
+                  data-id="${placeId}" 
+                  style="cursor: pointer; font-size: 20px; color: ${starColor};" 
+                  title="В избранное">
+              ★
+            </span>
+          </div>
           ${item.image ? `<br><img src="${item.image.value}" class="balloon-img" style="width:100%;margin-top:8px;border-radius:4px;"/>` : ''}
         </div>`;
-
-        collection.add(new ymaps.Placemark([parseFloat(match[2]), parseFloat(match[1])], 
-          { balloonContent: html }, 
-          { preset: iconPreset }
-        ));
+      
+      const placemark = new ymaps.Placemark(
+        [parseFloat(match[2]), parseFloat(match[1])], 
+        { balloonContent: html }, 
+        { preset: iconPreset }
+      );
+       collection.add(placemark);
       });
     };
 
@@ -120,6 +146,26 @@ onMounted(() => {
     renderPlaces(embankments, embankmentGeoObjects, 'islands#blueWaterParkIcon');
   });
 });
+
+// функция для добавления места в избранное
+function toggleFavorite(place, starElement) {
+  let favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
+  const index = favorites.findIndex(fav => fav.id === place.place.value);
+
+  if (index === -1) {
+    favorites.push({
+      id: place.place.value,
+      name: place.placeLabel.value,
+      image: place.image ? place.image.value : null,
+      coord: place.coord.value
+    });
+    starElement.style.color = '#ffc107'; // золотой
+  } else {
+    favorites.splice(index, 1);
+    starElement.style.color = '#ccc'; // серый
+  }
+  localStorage.setItem('favorites', JSON.stringify(favorites));
+}
 </script>
 
 <style scoped>

@@ -48,7 +48,7 @@
 
       <div class="mt-3 text-center">
         <a href="http://127.0.0.1:8000/accounts/password_reset/" class="text-decoration-none">
-          Утерян пароль?
+          Забыи пароль?
         </a>
       </div>
     </div>
@@ -115,7 +115,6 @@ const handleLogin = async () => {
 
 <style scoped>
 .login-container {
-  /* Центрирование на весь экран */
   background-color: #f8f9fa;
 }
 </style>

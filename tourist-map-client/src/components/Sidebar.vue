@@ -13,7 +13,7 @@
           </router-link>
         </li>
         <li class="nav-item">
-          <router-link to="#" class="nav-link link-dark d-flex align-items-center">
+          <router-link to="/favorite" class="nav-link link-dark d-flex align-items-center">
             <img src="../assets/images/museum-list.svg" width="24" class="me-2">
             <span>Отмеченные места</span>
           </router-link>
