@@ -30,7 +30,7 @@ class Place(models.Model):
     address = models.CharField(max_length=500)
 
     # API
-    external_id = models.CharField(max_length = 100, unique=True, null=True)
+    external_id = models.CharField(max_length = 500, unique=True, null=True)
     rating = models.FloatField(default = 0)
 
     # прочая информация о месте

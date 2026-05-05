@@ -80,7 +80,7 @@ async function toggleFavorite(place, starElement) {
         title: place.placeLabel.value,
         image_url: place.image ? place.image.value : null,
         coordinate: place.coord.value,
-        city: ""
+        city: "Ростов-на-Дону"
       })
     });
 
@@ -112,7 +112,7 @@ onMounted(() => {
     myMap = new ymaps.Map("map", {
       center: [47.24, 39.71],
       zoom: 11,
-      controls: ['zoomControl']
+      controls: ['zoomControl', 'typeSelector']
     });
 
     // Коллекции для фильтрации
@@ -189,11 +189,11 @@ onMounted(() => {
     
     try {
       museumsData = await loadPlacesFromWikidata('Q33506');
-      renderPlaces(museumsData, museumGeoObjects, 'islands#redLeisureIcon');
+      renderPlaces(museumsData, collections.museums);
       await sleep(600); 
 
       parksData = await loadPlacesFromWikidata('Q11742');
-      renderPlaces(parksData, parkGeoObjects, 'islands#greenParkIcon');
+      renderPlaces(parksData, collections.parks);
       await sleep(600);
 
       embankmentsData = await loadPlacesFromWikidata('Q862454');

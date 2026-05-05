@@ -54,7 +54,7 @@ def api_toggle_favorite(request):
                 'id': fav.place.external_id,      # QID из Wikidata
                 'name': fav.place.name,           # Название
                 'city': fav.place.city.name,      # Город
-                'region': "",
+                'region': " ",
                 'date': fav.added_at.strftime("%d.%m.%Y"), 
                 'image': image_path,
                 'coordinate': f"{fav.place.location.x}, {fav.place.location.y}"
@@ -70,48 +70,64 @@ def api_toggle_favorite(request):
             if not external_id:
                 return JsonResponse({'status': 'error', 'message': 'No place_id provided'}, status=400)
 
-            # 1. Проверяем, есть ли уже это место в избранном у пользователя
             user = request.user if request.user.is_authenticated else User.objects.first()
+            
+            # 1. Проверяем избранное по внешнему ID места
             existing_fav = Favorite.objects.filter(user=user, place__external_id=external_id).first()
 
             if existing_fav:
-                # Если есть — удаляем (тоггл)
                 existing_fav.delete()
                 return JsonResponse({'status': 'removed'})
 
-            # Если места нет в базе Place, создаем его
-            # Сначала подготовим категорию и город (базовые заглушки)
-            category, _ = Category.objects.get_or_create(name="Культура", defaults={'slug': 'culture'})
-            city, _ = City.objects.get_or_create(name=data.get('city', 'Ростов-на-Дону'))
+            # 2. Обработка координат (более надежная)
+            coord_raw = data.get('coordinate', '')
+            try:
+                # Извлекаем все числа (включая отрицательные и дробные)
+                coords = re.findall(r"[-+]?\d*\.\d+|\d+", coord_raw)
+                if len(coords) >= 2:
+                    # Wikidata отдает Longitude Latitude. Django Point(x, y) ждет так же.
+                    point = Point(float(coords[0]), float(coords[1]))
+                else:
+                    raise ValueError("Недостаточно данных для координат")
+            except Exception:
+                # Дефолтные координаты Ростова, если парсинг провалился
+                point = Point(39.71, 47.24)
 
-            # Парсим координаты из строки "Point(39.71 47.24)" или просто чисел
-            coord_raw = data.get('coordinate', '0 0')
-            coords = re.findall(r"[-+]?\d*\.\d+|\d+", coord_raw)
-            point = Point(float(coords[0]), float(coords[1]))
+            # 3. Подготовка связанных сущностей
+            category, _ = Category.objects.get_or_create(name="Культура", defaults={'slug': 'culture'})
+            city_name = data.get('city') or 'Ростов-на-Дону'
+            city, _ = City.objects.get_or_create(name=city_name)
+
+            # 4. Создаем или обновляем Место
+            # Используем .truncate() или срезаем строку, если имя слишком длинное для БД
+            name = data.get('title', 'Без названия')[:250] 
 
             place, _ = Place.objects.update_or_create(
                 external_id=external_id,
                 defaults={
-                    'name': data.get('title', 'Без названия'),
+                    'name': name,
                     'category': category,
                     'city': city,
                     'location': point,
-                    'address': data.get('address', 'Адрес не указан'),
+                    'address': data.get('address', 'Адрес не указан')[:250],
                 }
             )
+
+            # 5. Картинка
             image_url = data.get('image_url')
             if image_url:
-                # Создаем или обновляем главную картинку
                 PlaceImage.objects.update_or_create(
                     place=place,
                     is_main=True,
                     defaults={'image': image_url}
                 )
-            # Создаем запись в избранном
-            Favorite.objects.create(user=user, place=place)
+
+            # 6. Создаем избранное (используем get_or_create во избежание дублей)
+            Favorite.objects.get_or_create(user=user, place=place)
+            
             return JsonResponse({'status': 'added'})
 
         except Exception as e:
+            # Выводим ошибку в консоль сервера, чтобы вы видели, что именно пошло не так
+            print(f"Ошибка в api_toggle_favorite: {str(e)}")
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-
-    return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
