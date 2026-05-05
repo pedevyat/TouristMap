@@ -7,7 +7,7 @@ import { onMounted, ref } from 'vue';
 
 let myMap = null;
 const isInitialized = ref(false);
-const dbFavoritesIds = ref(new Set()); // Перенесли сюда
+const dbFavoritesIds = ref(new Set());
 
 let museumsData = [];
 let parksData = [];
@@ -74,9 +74,7 @@ async function toggleFavorite(place, starElement) {
   try {
     const response = await fetch('http://127.0.0.1:8000/api/favorites/', {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         place_id: place.place.value,
         title: place.placeLabel.value,
@@ -86,20 +84,15 @@ async function toggleFavorite(place, starElement) {
       })
     });
 
-    if (!response.ok) {
-        throw new Error(`Ошибка сервера: ${response.status}`);
-    }
-
     const result = await response.json();
-    
-    if (result.status === 'added') {
-      starElement.style.color = '#ffc107';
-      dbFavoritesIds.value.add(place.place.value);
-      console.log("Добавлено в избранное");
-    } else if (result.status === 'removed') {
-      starElement.style.color = '#ccc';
-      dbFavoritesIds.value.delete(place.place.value);
-      console.log("Удалено из избранного");
+    if (response.ok) {
+      if (result.status === 'added') {
+        starElement.style.color = '#ffc107';
+        dbFavoritesIds.value.add(place.place.value);
+      } else if (result.status === 'removed') {
+        starElement.style.color = '#ccc';
+        dbFavoritesIds.value.delete(place.place.value);
+      }
     }
   } catch (e) {
     console.error("Сетевая ошибка при добавлении в избранное:", e);
@@ -119,69 +112,81 @@ onMounted(() => {
     myMap = new ymaps.Map("map", {
       center: [47.24, 39.71],
       zoom: 11,
-      controls: ['zoomControl', 'typeSelector']
+      controls: ['zoomControl']
     });
 
-    const museumGeoObjects = new ymaps.GeoObjectCollection();
-    const parkGeoObjects = new ymaps.GeoObjectCollection();
-    const embankmentGeoObjects = new ymaps.GeoObjectCollection();
+    // Коллекции для фильтрации
+    const collections = {
+      museums: new ymaps.GeoObjectCollection(null, { preset: 'islands#redLeisureIcon' }),
+      parks: new ymaps.GeoObjectCollection(null, { preset: 'islands#greenParkIcon' }),
+      embankments: new ymaps.GeoObjectCollection(null, { preset: 'islands#blueWaterParkIcon' })
+    };
 
-    myMap.geoObjects.add(museumGeoObjects);
-    myMap.geoObjects.add(parkGeoObjects);
-    myMap.geoObjects.add(embankmentGeoObjects);
+    Object.values(collections).forEach(col => myMap.geoObjects.add(col));
 
-    // Отрисовка
-    const renderPlaces = (data, collection, iconPreset) => {
+    // Функция отрисовки
+    const renderPlaces = (data, collection) => {
       data.forEach(item => {
-        const name = item.placeLabel.value;
         const placeId = item.place.value;
         const match = item.coord.value.match(/Point\(([-0-9.]+) ([-0-9.]+)\)/);
         if (!match) return;
-        
-        // Теперь dbFavoritesIds доступен здесь
-        const isFav = dbFavoritesIds.value.has(placeId); 
+
+        const isFav = dbFavoritesIds.value.has(placeId);
         const starColor = isFav ? '#ffc107' : '#ccc';
-        
+
         const html = `
           <div style="max-width: 200px; font-family: sans-serif;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-              <strong style="margin-right: 15px; font-size: 14px;">${name}</strong>
-              <span class="favorite-star" 
-                    data-id="${placeId}" 
-                    style="cursor: pointer; font-size: 20px; color: ${starColor};" 
-                    title="В избранное">★</span>
+            <div style="display: flex; justify-content: space-between;">
+              <strong style="font-size: 14px;">${item.placeLabel.value}</strong>
+              <span class="favorite-star" data-id="${placeId}" 
+                    style="cursor: pointer; font-size: 20px; color: ${starColor};">★</span>
             </div>
-            ${item.image ? `<img src="${item.image.value}" class="balloon-img" style="width:100%; margin-top:8px; border-radius:4px;"/>` : ''}
+            ${item.image ? `<img src="${item.image.value}" style="width:100%; margin-top:8px; border-radius:4px;"/>` : ''}
           </div>`;
-        
+
         const placemark = new ymaps.Placemark(
           [parseFloat(match[2]), parseFloat(match[1])],
-          { balloonContent: html }, 
-          { preset: iconPreset }
+          { balloonContent: html }
         );
         collection.add(placemark);
       });
     };
 
-    // Делегирование клика
+    // Настройка фильтров (ListBox)
+    const createMenuItem = (label, collection) => {
+      const item = new ymaps.control.ListBoxItem({ data: { content: label }, state: { selected: true }});
+      item.events.add('click', () => {
+        item.isSelected() ? myMap.geoObjects.remove(collection) : myMap.geoObjects.add(collection);
+      });
+      return item;
+    };
+
+    const listBox = new ymaps.control.ListBox({
+      data: { content: 'Категории' },
+      items: [
+        createMenuItem('Музеи', collections.museums),
+        createMenuItem('Парки', collections.parks),
+        createMenuItem('Набережные', collections.embankments)
+      ],
+      options: { float: 'right' }
+    });
+    myMap.controls.add(listBox);
+
+    // Обработка клика по звезде (Делегирование)
     document.addEventListener('click', async (e) => {
       const starBtn = e.target.closest('.favorite-star');
       if (starBtn) {
-        e.preventDefault();
         e.stopPropagation();
-
         const placeId = starBtn.getAttribute('data-id');
-        const allPlaces = [...museumsData, ...parksData, ...embankmentsData];
-        const placeData = allPlaces.find(p => p.place.value === placeId);
-
-        if (placeData) {
-          await toggleFavorite(placeData, starBtn);
-        }
+        const allData = [...museumsData, ...parksData, ...embankmentsData];
+        const place = allData.find(p => p.place.value === placeId);
+        if (place) await toggleFavorite(place, starBtn);
       }
     });
 
+    // Загрузка данных
     const sleep = (ms) => new Promise(res => setTimeout(res, ms));
-
+    
     try {
       museumsData = await loadPlacesFromWikidata('Q33506');
       renderPlaces(museumsData, museumGeoObjects, 'islands#redLeisureIcon');
@@ -192,7 +197,7 @@ onMounted(() => {
       await sleep(600);
 
       embankmentsData = await loadPlacesFromWikidata('Q862454');
-      renderPlaces(embankmentsData, embankmentGeoObjects, 'islands#blueWaterParkIcon');
+      renderPlaces(embankmentsData, collections.embankments);
 
       isInitialized.value = true;
     } catch (err) {
