@@ -69,6 +69,6 @@ class Favorite(models.Model):
 class PlaceImage(models.Model):
     """Галерея фото места"""
     place = models.ForeignKey(Place, on_delete=models.CASCADE, related_name='images')
-    image = models.ImageField(upload_to='places/')
+    image = models.URLField(max_length=500)
     is_main = models.BooleanField(default=False)
 

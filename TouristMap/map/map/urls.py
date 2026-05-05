@@ -19,10 +19,12 @@ from django.urls import path, include
 from map_app import views
 from django.conf import settings
 from django.conf.urls.static import static
+from map_app.views import index, api_login, api_toggle_favorite
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', views.index, name='index'),
+    path('', include('map_app.urls')),
     path('accounts/', include('django.contrib.auth.urls')),
     path('api/login/', views.api_login, name='api_login'),
+    path('api/favorites/', api_toggle_favorite, name='favorite-add'),
 ]

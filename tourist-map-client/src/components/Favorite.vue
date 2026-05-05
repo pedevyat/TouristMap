@@ -54,19 +54,42 @@
 </template>
 
 <script setup>
-    import { ref, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 
-    const favorites = ref([]);
+const favorites = ref([]);
 
-    const loadFavorites = () => {
-    const data = localStorage.getItem('favorites');
-    favorites.value = data ? JSON.parse(data) : [];
-    };
+// Загрузка данных с сервера
+const loadFavorites = async () => {
+  try {
+    const response = await fetch('http://127.0.0.1:8000/api/favorites/');
+    if (response.ok) {
+      // Сервер должен вернуть массив объектов с полями: id, name, city, region, date, image
+      favorites.value = await response.json();
+    } else {
+      console.error("Ошибка при получении данных с сервера");
+    }
+  } catch (error) {
+    console.error("Сетевая ошибка:", error);
+  }
+};
 
-    const removeFromFavorites = (id) => {
-    favorites.value = favorites.value.filter(fav => fav.id !== id);
-    localStorage.setItem('favorites', JSON.stringify(favorites.value));
-    };
+// Удаление через сервер
+const removeFromFavorites = async (id) => {
+  try {
+    const response = await fetch('http://127.0.0.1:8000/api/favorites/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ place_id: id }) // Передаем ID места для удаления (toggle)
+    });
 
-    onMounted(loadFavorites);
+    if (response.ok) {
+      // Если на сервере удаление прошло успешно, обновляем локальный список
+      favorites.value = favorites.value.filter(fav => fav.id !== id);
+    }
+  } catch (error) {
+    console.error("Ошибка при удалении:", error);
+  }
+};
+
+onMounted(loadFavorites);
 </script>
