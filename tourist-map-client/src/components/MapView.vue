@@ -12,6 +12,8 @@ const dbFavoritesIds = ref(new Set());
 let museumsData = [];
 let parksData = [];
 let embankmentsData = [];
+let culturalData = [];
+let curchesData = [];
 
 // --- ЛОГИКА API ---
 
@@ -36,7 +38,11 @@ async function loadPlacesFromWikidata(classQID) {
   } else if (classQID === 'Q862454') {
     categoryFilter = `VALUES ?type { wd:Q862454 wd:Q15631416 wd:Q3840711 } ?place wdt:P31 ?type.`;
   } else if (classQID === 'Q33506') {
-    categoryFilter = `VALUES ?type { wd:Q33506 wd:Q205391 wd:Q54173 wd:Q833017 } ?place wdt:P31 ?type.`;
+    categoryFilter = `VALUES ?type { wd:Q33506 wd:Q205391 wd:Q54173 wd:Q833017 wd:Q7075 } ?place wdt:P31 ?type.`;
+   } else if (classQID === 'Q24354') {
+    categoryFilter = `VALUES ?type { wd:Q11635 wd:Q153562 wd:Q1060165 wd:Q47928 wd:Q11812394 wd:Q16889960 } ?place wdt:P31 ?type.`;
+   } else if (classQID === 'Q2977') {
+    categoryFilter = `VALUES ?type { wd:Q2977 wd:Q16911666 wd:Q108325 wd:Q47475 wd:Q34627 wd:Q33052 wd:Q16970 } ?place wdt:P31 ?type.`;
   } else {
     categoryFilter = `?place wdt:P31 wd:${classQID}.`;
   }
@@ -49,6 +55,8 @@ async function loadPlacesFromWikidata(classQID) {
           bd:serviceParam wikibase:radius "30" . 
       }
       ${categoryFilter}
+      FILTER NOT EXISTS { ?place wdt:P576 ?demolished. }
+      FILTER NOT EXISTS { ?place wdt:P31/wdt:P279* wd:Q12269557. }
       OPTIONAL { ?place wdt:P18 ?image. }
       SERVICE wikibase:label { bd:serviceParam wikibase:language "ru,en". }
     }
@@ -119,7 +127,9 @@ onMounted(() => {
     const collections = {
       museums: new ymaps.GeoObjectCollection(null, { preset: 'islands#redLeisureIcon' }),
       parks: new ymaps.GeoObjectCollection(null, { preset: 'islands#greenParkIcon' }),
-      embankments: new ymaps.GeoObjectCollection(null, { preset: 'islands#blueWaterParkIcon' })
+      embankments: new ymaps.GeoObjectCollection(null, { preset: 'islands#blueWaterParkIcon' }),
+      cultural: new ymaps.GeoObjectCollection(null, { preset: 'islands#brownTheaterIcon'}),
+      curches: new ymaps.GeoObjectCollection(null, { preset: 'islands#yellowChristianIcon'}),
     };
 
     Object.values(collections).forEach(col => myMap.geoObjects.add(col));
@@ -166,7 +176,9 @@ onMounted(() => {
       items: [
         createMenuItem('Музеи', collections.museums),
         createMenuItem('Парки', collections.parks),
-        createMenuItem('Набережные', collections.embankments)
+        createMenuItem('Набережные', collections.embankments),
+        createMenuItem('Культурные места', collections.cultural),
+        createMenuItem('Храмы', collections.curches)
       ],
       options: { float: 'right' }
     });
@@ -178,7 +190,7 @@ onMounted(() => {
       if (starBtn) {
         e.stopPropagation();
         const placeId = starBtn.getAttribute('data-id');
-        const allData = [...museumsData, ...parksData, ...embankmentsData];
+        const allData = [...museumsData, ...parksData, ...embankmentsData, ...culturalData, ...curches];
         const place = allData.find(p => p.place.value === placeId);
         if (place) await toggleFavorite(place, starBtn);
       }
@@ -198,6 +210,13 @@ onMounted(() => {
 
       embankmentsData = await loadPlacesFromWikidata('Q862454');
       renderPlaces(embankmentsData, collections.embankments);
+
+      culturalData = await loadPlacesFromWikidata('Q24354')
+      renderPlaces(culturalData, collections.cultural);
+
+      curchesData = await loadPlacesFromWikidata('Q2977')
+      renderPlaces(curchesData, collections.curches);
+
 
       isInitialized.value = true;
     } catch (err) {
