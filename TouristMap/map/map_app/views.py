@@ -36,6 +36,12 @@ def api_login(request):
 
 @csrf_exempt
 def api_toggle_favorite(request):
+    if not request.user.is_authenticated:
+        if request.method == 'GET':
+            return JsonResponse([], safe=False)
+        return JsonResponse({'status': 'error', 'message': 'Требуется авторизация'}, status=401)
+    
+    user = request.user
     # Получение всех избранных мест пользователя
     if request.method == 'GET':
         # Берем текущего пользователя или первого из базы (для тестов)

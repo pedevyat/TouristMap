@@ -58,10 +58,29 @@ import { ref, onMounted } from 'vue';
 
 const favorites = ref([]);
 
+// Функция для получения CSRF-токена (необходима для работы POST в Django)
+function getCookie(name) {
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== '') {
+    const cookies = document.cookie.split(';');
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === (name + '=')) {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
+
 // Загрузка данных с сервера
 const loadFavorites = async () => {
   try {
-    const response = await fetch('http://127.0.0.1:8000/api/favorites/');
+    const response = await fetch('http://127.0.0.1:8000/api/favorites/', {
+      method: 'GET',
+      credentials: 'include'
+    });
     if (response.ok) {
       // Сервер должен вернуть массив объектов с полями: id, name, city, region, date, image
       favorites.value = await response.json();
@@ -78,7 +97,8 @@ const removeFromFavorites = async (id) => {
   try {
     const response = await fetch('http://127.0.0.1:8000/api/favorites/', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      credentials: 'include',
       body: JSON.stringify({ place_id: id }) // Передаем ID места для удаления (toggle)
     });
 

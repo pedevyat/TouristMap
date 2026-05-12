@@ -8,25 +8,51 @@ import { onMounted, ref } from 'vue';
 let myMap = null;
 const isInitialized = ref(false);
 const dbFavoritesIds = ref(new Set());
+const isAuthenticated = ref(false);
 
 let museumsData = [];
 let parksData = [];
 let embankmentsData = [];
 let culturalData = [];
 let curchesData = [];
-
+let viewsData = [];
 // --- ЛОГИКА API ---
+
+// Функция для получения CSRF-токена из куки
+function getCookie(name) {
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== '') {
+    const cookies = document.cookie.split(';');
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === (name + '=')) {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
 
 // Загрузка избранного из Django
 const fetchDbFavorites = async () => {
+  // Если мы знаем, что пользователь не залогинен, даже не отправляем запрос
+  if (!isAuthenticated.value) {
+    dbFavoritesIds.value = new Set();
+    return;
+  }
+
   try {
     const response = await fetch('http://127.0.0.1:8000/api/favorites/');
     if (response.ok) {
       const data = await response.json();
       dbFavoritesIds.value = new Set(data.map(item => item.id));
+    } else if (response.status === 401 || response.status === 403) {
+      isAuthenticated.value = false;
+      dbFavoritesIds.value = new Set();
     }
   } catch (e) {
-    console.error("Не удалось подгрузить избранное для карты:", e);
+    console.error("Не удалось подгрузить избранное:", e);
   }
 };
 
@@ -41,19 +67,16 @@ async function loadPlacesFromWikidata(classQID) {
     categoryFilter = `VALUES ?type { wd:Q33506 wd:Q205391 wd:Q54173 wd:Q833017 wd:Q7075 } ?place wdt:P31 ?type.`;
    } else if (classQID === 'Q24354') {
     categoryFilter = `VALUES ?type { wd:Q11635 wd:Q153562 wd:Q1060165 wd:Q47928 wd:Q11812394 wd:Q16889960 } ?place wdt:P31 ?type.`;
-   } else if (classQID === 'Q2977') {
-    categoryFilter = `VALUES ?type { wd:Q2977 wd:Q16911666 wd:Q108325 wd:Q47475 wd:Q34627 wd:Q33052 wd:Q16970 } ?place wdt:P31 ?type.`;
-  } else {
-    categoryFilter = `?place wdt:P31 wd:${classQID}.`;
+  // } else if (classQID === 'Q2977') {
+   // categoryFilter = `VALUES ?type { wd:Q2977 wd:Q16911666 wd:Q108325 wd:Q47475 wd:Q34627 wd:Q33052 wd:Q16970 } ?place wdt:P31 ?type.`;
+  } else if (classQID === 'Q2035041') {
+    categoryFilter = `VALUES ?type {  wd:Q8502 } ?place wdt:P31 ?type.`;
   }
 
   const query = `
     SELECT DISTINCT ?place ?placeLabel ?coord ?image WHERE {
-      SERVICE wikibase:around { 
-          ?place wdt:P625 ?coord . 
-          bd:serviceParam wikibase:center "Point(39.71 47.24)"^^geo:wktLiteral .
-          bd:serviceParam wikibase:radius "30" . 
-      }
+      ?place wdt:P17 wd:Q159 .
+      ?place wdt:P625 ?coord .
       ${categoryFilter}
       FILTER NOT EXISTS { ?place wdt:P576 ?demolished. }
       FILTER NOT EXISTS { ?place wdt:P31/wdt:P279* wd:Q12269557. }
@@ -82,7 +105,8 @@ async function toggleFavorite(place, starElement) {
   try {
     const response = await fetch('http://127.0.0.1:8000/api/favorites/', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      credentials: 'include',
       body: JSON.stringify({
         place_id: place.place.value,
         title: place.placeLabel.value,
@@ -114,7 +138,18 @@ onMounted(() => {
   if (isInitialized.value) return;
 
   ymaps.ready(async () => {
-    // Сначала загружаем ID избранных мест, чтобы знать, как красить звезды
+
+    try {
+      const authCheck = await fetch('http://127.0.0.1:8000/api/login/', { credentials: 'include' });
+      if (authCheck.ok) {
+        const userData = await authCheck.json();
+        if (userData.username) {
+          isAuthenticated.value = true;
+        }
+      }
+    } catch (e) {
+      console.log("Пользователь не авторизован");
+    }
     await fetchDbFavorites();
 
     myMap = new ymaps.Map("map", {
@@ -130,6 +165,7 @@ onMounted(() => {
       embankments: new ymaps.GeoObjectCollection(null, { preset: 'islands#blueWaterParkIcon' }),
       cultural: new ymaps.GeoObjectCollection(null, { preset: 'islands#brownTheaterIcon'}),
       curches: new ymaps.GeoObjectCollection(null, { preset: 'islands#yellowChristianIcon'}),
+      views: new ymaps.GeoObjectCollection(null, { preset: 'islands#violetObservationIcon' }),
     };
 
     Object.values(collections).forEach(col => myMap.geoObjects.add(col));
@@ -178,7 +214,8 @@ onMounted(() => {
         createMenuItem('Парки', collections.parks),
         createMenuItem('Набережные', collections.embankments),
         createMenuItem('Культурные места', collections.cultural),
-        createMenuItem('Храмы', collections.curches)
+        createMenuItem('Храмы', collections.curches),
+        createMenuItem('Смотровые площадки', collections.views),
       ],
       options: { float: 'right' }
     });
@@ -190,7 +227,7 @@ onMounted(() => {
       if (starBtn) {
         e.stopPropagation();
         const placeId = starBtn.getAttribute('data-id');
-        const allData = [...museumsData, ...parksData, ...embankmentsData, ...culturalData, ...curches];
+        const allData = [...museumsData, ...parksData, ...embankmentsData, ...culturalData, ...curchesData, ...viewsData];
         const place = allData.find(p => p.place.value === placeId);
         if (place) await toggleFavorite(place, starBtn);
       }
@@ -202,21 +239,27 @@ onMounted(() => {
     try {
       museumsData = await loadPlacesFromWikidata('Q33506');
       renderPlaces(museumsData, collections.museums);
-      await sleep(600); 
+      await sleep(1000); 
 
       parksData = await loadPlacesFromWikidata('Q11742');
       renderPlaces(parksData, collections.parks);
-      await sleep(600);
+      await sleep(1000);
 
       embankmentsData = await loadPlacesFromWikidata('Q862454');
       renderPlaces(embankmentsData, collections.embankments);
+      await sleep(1000);
 
       culturalData = await loadPlacesFromWikidata('Q24354')
       renderPlaces(culturalData, collections.cultural);
+      await sleep(1000);
 
       curchesData = await loadPlacesFromWikidata('Q2977')
       renderPlaces(curchesData, collections.curches);
+      await sleep(1000);
 
+      viewsData = await loadPlacesFromWikidata('Q2035041')
+      renderPlaces(viewsData, collections.views);
+      await sleep(1000);
 
       isInitialized.value = true;
     } catch (err) {
