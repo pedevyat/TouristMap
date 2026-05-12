@@ -96,12 +96,10 @@ def api_toggle_favorite(request):
                 else:
                     raise ValueError("Недостаточно данных для координат")
             except Exception:
-                # Дефолтные координаты Ростова, если парсинг провалился
                 point = Point(39.71, 47.24)
 
-            # 3. Подготовка связанных сущностей
             category, _ = Category.objects.get_or_create(name="Культура", defaults={'slug': 'culture'})
-            city_name = data.get('city') or 'Ростов-на-Дону'
+            city_name = data.get('city')
             city, _ = City.objects.get_or_create(name=city_name)
 
             # 4. Создаем или обновляем Место

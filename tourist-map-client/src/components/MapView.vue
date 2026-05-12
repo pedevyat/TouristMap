@@ -70,19 +70,27 @@ async function loadPlacesFromWikidata(classQID) {
   // } else if (classQID === 'Q2977') {
    // categoryFilter = `VALUES ?type { wd:Q2977 wd:Q16911666 wd:Q108325 wd:Q47475 wd:Q34627 wd:Q33052 wd:Q16970 } ?place wdt:P31 ?type.`;
   } else if (classQID === 'Q2035041') {
-    categoryFilter = `VALUES ?type {  wd:Q8502 } ?place wdt:P31 ?type.`;
+    categoryFilter = `VALUES ?type { wd:Q8502 } ?place wdt:P31 ?type.`;
   }
 
   const query = `
-    SELECT DISTINCT ?place ?placeLabel ?coord ?image WHERE {
-      ?place wdt:P17 wd:Q159 .
-      ?place wdt:P625 ?coord .
+    SELECT DISTINCT ?place ?placeLabel ?coord ?image ?cityLabel WHERE {
+      ?place wdt:P17 wd:Q159 . # Россия
+      ?place wdt:P625 ?coord . # Координаты
       ${categoryFilter}
+      
+      # Обязательное наличие фото (убираем OPTIONAL)
+      ?place wdt:P18 ?image . 
+
+      # Поиск города (оставляем опциональным, чтобы не терять объекты)
+      OPTIONAL { ?place wdt:P131 ?city. }
+
       FILTER NOT EXISTS { ?place wdt:P576 ?demolished. }
       FILTER NOT EXISTS { ?place wdt:P31/wdt:P279* wd:Q12269557. }
-      OPTIONAL { ?place wdt:P18 ?image. }
+      
       SERVICE wikibase:label { bd:serviceParam wikibase:language "ru,en". }
     }
+    LIMIT 2000
   `;
 
   const url = "https://query.wikidata.org/sparql";
@@ -102,6 +110,7 @@ async function loadPlacesFromWikidata(classQID) {
 
 // Переключение избранного (POST на бэкенд)
 async function toggleFavorite(place, starElement) {
+  const cityName = place.cityLabel ? place.cityLabel.value : "Неизвестно";
   try {
     const response = await fetch('http://127.0.0.1:8000/api/favorites/', {
       method: 'POST',
@@ -112,7 +121,7 @@ async function toggleFavorite(place, starElement) {
         title: place.placeLabel.value,
         image_url: place.image ? place.image.value : null,
         coordinate: place.coord.value,
-        city: "Ростов-на-Дону"
+        city: cityName
       })
     });
 
@@ -164,7 +173,7 @@ onMounted(() => {
       parks: new ymaps.GeoObjectCollection(null, { preset: 'islands#greenParkIcon' }),
       embankments: new ymaps.GeoObjectCollection(null, { preset: 'islands#blueWaterParkIcon' }),
       cultural: new ymaps.GeoObjectCollection(null, { preset: 'islands#brownTheaterIcon'}),
-      curches: new ymaps.GeoObjectCollection(null, { preset: 'islands#yellowChristianIcon'}),
+      //curches: new ymaps.GeoObjectCollection(null, { preset: 'islands#yellowChristianIcon'}),
       views: new ymaps.GeoObjectCollection(null, { preset: 'islands#violetObservationIcon' }),
     };
 
@@ -187,7 +196,7 @@ onMounted(() => {
               <span class="favorite-star" data-id="${placeId}" 
                     style="cursor: pointer; font-size: 20px; color: ${starColor};">★</span>
             </div>
-            ${item.image ? `<img src="${item.image.value}" style="width:100%; margin-top:8px; border-radius:4px;"/>` : ''}
+            ${item.image ? `<img src="${item.image.value}"  class="balloon-img" style="width:100%; margin-top:8px; border-radius:4px;"/>` : ''}
           </div>`;
 
         const placemark = new ymaps.Placemark(
@@ -214,7 +223,7 @@ onMounted(() => {
         createMenuItem('Парки', collections.parks),
         createMenuItem('Набережные', collections.embankments),
         createMenuItem('Культурные места', collections.cultural),
-        createMenuItem('Храмы', collections.curches),
+       // createMenuItem('Храмы', collections.curches),
         createMenuItem('Смотровые площадки', collections.views),
       ],
       options: { float: 'right' }
@@ -227,7 +236,7 @@ onMounted(() => {
       if (starBtn) {
         e.stopPropagation();
         const placeId = starBtn.getAttribute('data-id');
-        const allData = [...museumsData, ...parksData, ...embankmentsData, ...culturalData, ...curchesData, ...viewsData];
+        const allData = [...museumsData, ...parksData, ...embankmentsData, ...culturalData, /*..curchesData,*/ ...viewsData];
         const place = allData.find(p => p.place.value === placeId);
         if (place) await toggleFavorite(place, starBtn);
       }
@@ -253,9 +262,9 @@ onMounted(() => {
       renderPlaces(culturalData, collections.cultural);
       await sleep(1000);
 
-      curchesData = await loadPlacesFromWikidata('Q2977')
-      renderPlaces(curchesData, collections.curches);
-      await sleep(1000);
+     // curchesData = await loadPlacesFromWikidata('Q2977')
+     // renderPlaces(curchesData, collections.curches);
+     // await sleep(1000);
 
       viewsData = await loadPlacesFromWikidata('Q2035041')
       renderPlaces(viewsData, collections.views);
@@ -268,3 +277,12 @@ onMounted(() => {
   });
 });
 </script>
+
+<style>
+:deep(.balloon-img) {
+    background: url('https://i.gifer.com/ZKZg.gif') center center no-repeat;
+    background-size: 30px;
+    min-height: 100px;
+    display: block;
+}
+</style>
