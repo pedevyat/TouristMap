@@ -4,6 +4,8 @@
 
 <script setup>
 import { onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
+const router = useRouter();
 
 let myMap = null;
 const isInitialized = ref(false);
@@ -36,7 +38,7 @@ function getCookie(name) {
 
 // Загрузка избранного из Django
 const fetchDbFavorites = async () => {
-  // Если мы знаем, что пользователь не залогинен, даже не отправляем запрос
+  // Если  пользователь не залогинен, не отправляем запрос
   if (!isAuthenticated.value) {
     dbFavoritesIds.value = new Set();
     return;
@@ -75,8 +77,8 @@ async function loadPlacesFromWikidata(classQID) {
 
   const query = `
     SELECT DISTINCT ?place ?placeLabel ?coord ?image ?cityLabel WHERE {
-      ?place wdt:P17 wd:Q159 . # Россия
-      ?place wdt:P625 ?coord . # Координаты
+      ?place wdt:P17 wd:Q159 . 
+      ?place wdt:P625 ?coord .
       ${categoryFilter}
       
       # Обязательное наличие фото (убираем OPTIONAL)
@@ -189,6 +191,8 @@ onMounted(() => {
         const isFav = dbFavoritesIds.value.has(placeId);
         const starColor = isFav ? '#ffc107' : '#ccc';
 
+        const qid = item.place.value.split('/').pop();
+
         const html = `
           <div style="max-width: 200px; font-family: sans-serif;">
             <div style="display: flex; justify-content: space-between;">
@@ -196,7 +200,11 @@ onMounted(() => {
               <span class="favorite-star" data-id="${placeId}" 
                     style="cursor: pointer; font-size: 20px; color: ${starColor};">★</span>
             </div>
-            ${item.image ? `<img src="${item.image.value}"  class="balloon-img" style="width:100%; margin-top:8px; border-radius:4px;"/>` : ''}
+            ${item.image ? `<img src="${item.image.value}" class="balloon-img" style="width:100%; margin-top:8px; border-radius:4px;"/>` : ''}
+            
+            <div style="margin-top: 10px;">
+              <a href="#" data-qid="${qid}" style="color: #007bff; font-size: 13px;">Подробнее</a>
+            </div>
           </div>`;
 
         const placemark = new ymaps.Placemark(
@@ -230,7 +238,7 @@ onMounted(() => {
     });
     myMap.controls.add(listBox);
 
-    // Обработка клика по звезде (Делегирование)
+    // Делегирование
     document.addEventListener('click', async (e) => {
       const starBtn = e.target.closest('.favorite-star');
       if (starBtn) {
@@ -239,6 +247,13 @@ onMounted(() => {
         const allData = [...museumsData, ...parksData, ...embankmentsData, ...culturalData, /*..curchesData,*/ ...viewsData];
         const place = allData.find(p => p.place.value === placeId);
         if (place) await toggleFavorite(place, starBtn);
+      }
+
+      const detailLink = e.target.closest('.detail-link');
+      if (detailLink) {
+        e.preventDefault();
+        const qid = detailLink.getAttribute('data-qid');
+        router.push({ name: 'Place', params: { id: qid } });
       }
     });
 

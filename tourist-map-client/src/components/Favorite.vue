@@ -83,7 +83,6 @@ const loadFavorites = async () => {
       credentials: 'include'
     });
     if (response.ok) {
-      // Сервер должен вернуть массив объектов с полями: id, name, city, region, date, image
       favorites.value = await response.json();
     } else {
       console.error("Ошибка при получении данных с сервера");
@@ -100,11 +99,10 @@ const removeFromFavorites = async (id) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
       credentials: 'include',
-      body: JSON.stringify({ place_id: id }) // Передаем ID места для удаления (toggle)
+      body: JSON.stringify({ place_id: id }) // Передаем ID места для удаления
     });
 
     if (response.ok) {
-      // Если на сервере удаление прошло успешно, обновляем локальный список
       favorites.value = favorites.value.filter(fav => fav.id !== id);
     }
   } catch (error) {
