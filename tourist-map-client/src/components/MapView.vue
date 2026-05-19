@@ -90,7 +90,7 @@ async function loadPlacesFromWikidata(classQID) {
       FILTER NOT EXISTS { ?place wdt:P576 ?demolished. }
       FILTER NOT EXISTS { ?place wdt:P31/wdt:P279* wd:Q12269557. }
       
-      SERVICE wikibase:label { bd:serviceParam wikibase:language "ru,en". }
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "ru". }
     }
     LIMIT 500
   `;
@@ -255,8 +255,6 @@ onMounted(() => {
         e.preventDefault();
         const qid = detailLink.getAttribute('data-qid');
         router.push({ name: 'Place', params: { id: qid } });
-      } else {
-        console.log("Не удалось перейти")
       }
     });
 
