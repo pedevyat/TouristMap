@@ -92,7 +92,7 @@ async function loadPlacesFromWikidata(classQID) {
       
       SERVICE wikibase:label { bd:serviceParam wikibase:language "ru,en". }
     }
-    LIMIT 2000
+    LIMIT 500
   `;
 
   const url = "https://query.wikidata.org/sparql";
@@ -203,7 +203,7 @@ onMounted(() => {
             ${item.image ? `<img src="${item.image.value}" class="balloon-img" style="width:100%; margin-top:8px; border-radius:4px;"/>` : ''}
             
             <div style="margin-top: 10px;">
-              <a href="#" data-qid="${qid}" style="color: #007bff; font-size: 13px;">Подробнее</a>
+              <a href="#" class="detail-link" data-qid="${qid}" style="color: #007bff; font-size: 13px; text-decoration: none;">Подробнее</a>
             </div>
           </div>`;
 
@@ -247,6 +247,7 @@ onMounted(() => {
         const allData = [...museumsData, ...parksData, ...embankmentsData, ...culturalData, /*..curchesData,*/ ...viewsData];
         const place = allData.find(p => p.place.value === placeId);
         if (place) await toggleFavorite(place, starBtn);
+        return;
       }
 
       const detailLink = e.target.closest('.detail-link');
@@ -254,6 +255,8 @@ onMounted(() => {
         e.preventDefault();
         const qid = detailLink.getAttribute('data-qid');
         router.push({ name: 'Place', params: { id: qid } });
+      } else {
+        console.log("Не удалось перейти")
       }
     });
 
