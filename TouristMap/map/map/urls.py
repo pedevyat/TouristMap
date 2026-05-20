@@ -26,5 +26,6 @@ urlpatterns = [
     path('', include('map_app.urls')),
     path('accounts/', include('django.contrib.auth.urls')),
     path('api/login/', views.api_login, name='api_login'),
+    path('api/register/', views.api_register, name='api_register'),
     path('api/favorites/', api_toggle_favorite, name='favorite-add'),
 ]

@@ -13,6 +13,11 @@ const routes = [
     component: () => import('@/components/registration/Login.vue')
   },
   {
+    path: '/signup',
+    name: 'signup',
+    component: () => import('@/components/registration/Registration.vue')
+  },
+  {
     path: '/favorite',
     name: 'favorite',
     component: () => import('@/components/Favorite.vue')

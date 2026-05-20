@@ -46,8 +46,11 @@
         </button>
       </form>
 
-      <div class="mt-3 text-center">
-        <a href="http://127.0.0.1:8000/accounts/password_reset/" class="text-decoration-none">
+      <div class="mt-3 text-center d-flex justify-content-between">
+        <router-link :to="{ name: 'signup' }" class="btn btn-outline-success">
+          Зарегистрироваться
+        </router-link>
+        <a href="http://127.0.0.1:8000/accounts/password_reset/" class="btn btn-outline-danger">
           Забыи пароль?
         </a>
       </div>

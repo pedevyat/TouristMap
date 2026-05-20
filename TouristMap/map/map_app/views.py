@@ -12,12 +12,6 @@ from django.contrib.auth.models import User
 def index(request):
     return render(request,'map_app/index.html')
 
-def about(request):
-    return HttpResponse("Здесь будет информация о проекте")
-
-def user(request):
-    return HttpResponse("Здесь будет личный кабинет")
-
 @ensure_csrf_cookie
 def api_login(request):
     if request.method == 'POST':
@@ -33,6 +27,38 @@ def api_login(request):
             
     # ОБЯЗАТЕЛЬНО возвращаем ответ для GET запроса (чтобы установилась куки)
     return JsonResponse({'status': 'waiting_for_post'})
+
+@csrf_exempt
+def api_register(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            username = data.get('username')
+            email = data.get('email')
+            password = data.get('password')
+            if not username or not email or not password:
+                return JsonResponse({'status': 'error', 'message': 'Заполните все поля'}, status=400)
+            # проверка занятости email
+            if User.objects.filter(email=email).exists():
+                return JsonResponse({'status': 'error', 'message': 'Этот email уже зарегистрирован'}, status=400)
+
+            # используем create_user, чтобы Django автоматически захешировал пароль
+            user = User.objects.create_user(username=username, email=email, password=password)
+            # Автоматически авторизуем пользователя сразу после регистрации
+            login(request, user)
+
+            return JsonResponse({
+                'status': 'ok',
+                'message': 'Регистрация прошла успешно',
+                'username': user.username
+            })
+
+        except json.JSONDecodeError:
+            return JsonResponse({'status': 'error', 'message': 'Некорректный формат данных (JSON)'}, status=400)
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': f'Внутренняя ошибка сервера: {str(e)}'}, status=500)
+
+    return JsonResponse({'status': 'error', 'message': 'Метод не поддерживается'}, status=405)
 
 @csrf_exempt
 def api_toggle_favorite(request):
