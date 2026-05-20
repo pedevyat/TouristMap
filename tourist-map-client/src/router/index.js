@@ -22,7 +22,13 @@ const routes = [
     name: 'Place',
     component: () => import('@/components/Place.vue'),
     props: true
-  }
+  },
+  {
+    path: '/selection',
+    name: 'CityPlace',
+    component: () => import('@/components/CityPlace.vue'),
+    props: true
+  },
 ]
 
 const router = createRouter({

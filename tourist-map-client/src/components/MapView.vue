@@ -92,7 +92,6 @@ async function loadPlacesFromWikidata(classQID) {
       
       SERVICE wikibase:label { bd:serviceParam wikibase:language "ru". }
     }
-    LIMIT 500
   `;
 
   const url = "https://query.wikidata.org/sparql";

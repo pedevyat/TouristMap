@@ -19,7 +19,7 @@
           </router-link>
         </li>
         <li class="nav-item">
-          <router-link to="#" class="nav-link link-dark d-flex align-items-center">
+          <router-link to="/selection" class="nav-link link-dark d-flex align-items-center">
             <img src="../assets/images/star.svg" width="24" class="me-2">
             <span>Подборка мест</span>
           </router-link>

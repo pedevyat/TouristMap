@@ -5,7 +5,7 @@
 
     <main class="flex-grow-1 position-relative">
       <router-view v-slot="{ Component }">
-        <keep-alive include="MapView">
+        <keep-alive :max="5">
           <component :is="Component" :key="$route.fullPath" />
         </keep-alive>
       </router-view>
