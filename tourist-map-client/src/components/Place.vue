@@ -1,25 +1,27 @@
 <template>
-  <div class="container mt-5" v-if="place">
-    <div class="row d-flex justify-content-between">
-      <div class="col-md-6">
-        <h1 class="fw-bold text-black">{{ place.label }}</h1>
-        <p class="text-muted">{{ place.description }}</p>
-        <li v-if="place.wikipedia">
-            <a :href="place.wikipedia" target="_blank" rel="noopener noreferrer">
-              <strong>Подробнее в Википедии</strong>
-            </a>
-        </li>
-        <hr>
-        <ul class="list-unstyled text-black">
-          <li><strong>Город/регион:</strong> {{ place.city }}</li>
-          <li><strong>Координаты:</strong> {{ place.coord }}</li>
-          <li v-if="place.website">
-            <strong>Сайт:</strong> <a :href="place.website" target="_blank">Перейти</a>
+  <div class="scroll-container">
+    <div class="container mt-5" v-if="place">
+      <div class="row d-flex justify-content-between">
+        <div class="col-md-6">
+          <h1 class="fw-bold text-black">{{ place.label }}</h1>
+          <p class="text-muted">{{ place.description }}</p>
+          <li v-if="place.wikipedia">
+              <a :href="place.wikipedia" target="_blank" rel="noopener noreferrer">
+                <strong>Подробнее в Википедии</strong>
+              </a>
           </li>
-        </ul>
-      </div>
-      <div class="col-md-6">
-        <img :src="place.image" class="img-fluid rounded shadow" :alt="place.label">
+          <hr>
+          <ul class="list-unstyled text-black">
+            <li><strong>Город/регион:</strong> {{ place.city }}</li>
+            <li><strong>Координаты:</strong> {{ place.coord }}</li>
+            <li v-if="place.website">
+              <strong>Сайт:</strong> <a :href="place.website" target="_blank">Перейти</a>
+            </li>
+          </ul>
+        </div>
+        <div class="col-md-6">
+          <img :src="place.image" class="img-fluid rounded shadow" :alt="place.label">
+        </div>
       </div>
     </div>
   </div>
@@ -128,6 +130,10 @@ onMounted(() => {
 });
 </script>
 
-<style>
-
+<style scoped>
+.scroll-container {
+  max-height: 100vh;
+  overflow-y: auto;     
+  overflow-x: hidden;   
+}
 </style>
