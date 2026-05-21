@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from django.http import HttpResponse, JsonResponse
-from django.contrib.auth import authenticate, login
+from django.contrib.auth import authenticate, login, logout
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 import json
 from .models import Place, Favorite, Category, City, PlaceImage
@@ -27,6 +27,14 @@ def api_login(request):
             
     # ОБЯЗАТЕЛЬНО возвращаем ответ для GET запроса (чтобы установилась куки)
     return JsonResponse({'status': 'waiting_for_post'})
+
+@csrf_exempt
+def api_logout(request):
+    if request.method == 'POST':
+        logout(request)
+        return JsonResponse({'status': 'ok', 'message': 'Вы успешно вышли из системы'})
+    
+    return JsonResponse({'status': 'error', 'message': 'Метод не поддерживается'}, status=405)
 
 @csrf_exempt
 def api_register(request):
@@ -63,18 +71,11 @@ def api_register(request):
 @csrf_exempt
 def api_toggle_favorite(request):
     if not request.user.is_authenticated:
-        if request.method == 'GET':
-            return JsonResponse([], safe=False)
         return JsonResponse({'status': 'error', 'message': 'Требуется авторизация'}, status=401)
     
     user = request.user
     # Получение всех избранных мест пользователя
     if request.method == 'GET':
-        # Берем текущего пользователя или первого из базы (для тестов)
-        user = request.user if request.user.is_authenticated else User.objects.first()
-        if not user:
-            return JsonResponse([], safe=False)
-
         # Подгружаем связанные данные через select_related для оптимизации
         favorites = Favorite.objects.filter(user=user).select_related('place', 'place__city')
         
@@ -101,17 +102,15 @@ def api_toggle_favorite(request):
             
             if not external_id:
                 return JsonResponse({'status': 'error', 'message': 'No place_id provided'}, status=400)
-
-            user = request.user if request.user.is_authenticated else User.objects.first()
             
-            # 1. Проверяем избранное по внешнему ID места
+            # Проверяем избранное по внешнему ID места
             existing_fav = Favorite.objects.filter(user=user, place__external_id=external_id).first()
 
             if existing_fav:
                 existing_fav.delete()
                 return JsonResponse({'status': 'removed'})
 
-            # 2. Обработка координат (более надежная)
+            # Обработка координат
             coord_raw = data.get('coordinate', '')
             try:
                 # Извлекаем все числа (включая отрицательные и дробные)
@@ -128,7 +127,7 @@ def api_toggle_favorite(request):
             city_name = data.get('city')
             city, _ = City.objects.get_or_create(name=city_name)
 
-            # 4. Создаем или обновляем Место
+            # Создаем или обновляем Место
             # Используем .truncate() или срезаем строку, если имя слишком длинное для БД
             name = data.get('title', 'Без названия')[:250] 
 
@@ -142,8 +141,6 @@ def api_toggle_favorite(request):
                     'address': data.get('address', 'Адрес не указан')[:250],
                 }
             )
-
-            # 5. Картинка
             image_url = data.get('image_url')
             if image_url:
                 PlaceImage.objects.update_or_create(
@@ -151,8 +148,7 @@ def api_toggle_favorite(request):
                     is_main=True,
                     defaults={'image': image_url}
                 )
-
-            # 6. Создаем избранное (используем get_or_create во избежание дублей)
+            # Создаем избранное (используем get_or_create во избежание дублей)
             Favorite.objects.get_or_create(user=user, place=place)
             
             return JsonResponse({'status': 'added'})

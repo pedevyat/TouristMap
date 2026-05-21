@@ -1,5 +1,5 @@
 <template>
-  <div class="container scroll-container mt-4 text-dark ">
+  <div class="container scroll-container mt-4 text-dark">
     <h2 class="mb-4 text-black fw-bold">Отмеченные места</h2>
     
     <div v-if="isFetching" class="text-center my-5">
@@ -12,7 +12,7 @@
 
     <div v-else class="table-responsive rounded shadow-sm">
       <table class="table table-hover align-middle bg-white">
-        <thead class="table">
+        <thead>
           <tr>
             <th scope="col" style="width: 80px;">Фото</th>
             <th scope="col">Место</th>
@@ -25,10 +25,10 @@
           <tr v-for="item in favorites" :key="item.id">
             <td>
               <img v-if="item.image" :src="item.image" 
-                  class="rounded" 
-                  style="width: 60px; height: 45px; object-fit: cover;">
+                   class="rounded" 
+                   style="width: 60px; height: 45px; object-fit: cover;">
               <div v-else class="bg-light rounded text-muted text-center" 
-                  style="width: 60px; height: 45px; font-size: 10px; line-height: 45px;">
+                   style="width: 60px; height: 45px; font-size: 10px; line-height: 45px;">
                 ?
               </div>
             </td>
@@ -51,13 +51,13 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useFetch } from '@vueuse/core';
-import { useCookies } from '@vueuse/integrations/useCookies';
+import { useRouter } from 'vue-router';
 
+const router = useRouter();
 const favorites = ref([]);
-const scrollTarget = ref(null);   
+const isFetching = ref(true);
 
-// Функция для получения CSRF-токена (необходима для работы POST в Django)
+// Функция для получения CSRF-токена
 function getCookie(name) {
   let cookieValue = null;
   if (document.cookie && document.cookie !== '') {
@@ -75,11 +75,19 @@ function getCookie(name) {
 
 // Загрузка данных с сервера
 const loadFavorites = async () => {
+  isFetching.value = true;
   try {
     const response = await fetch('http://127.0.0.1:8000/api/favorites/', {
       method: 'GET',
       credentials: 'include'
     });
+
+    if (response.status === 401 || response.status === 403) {
+      alert("Для просмотра отмеченных мест необходимо войти в аккаунт");
+      router.push({ name: 'login' });
+      return;
+    }
+
     if (response.ok) {
       favorites.value = await response.json();
     } else {
@@ -87,6 +95,8 @@ const loadFavorites = async () => {
     }
   } catch (error) {
     console.error("Сетевая ошибка:", error);
+  } finally {
+    isFetching.value = false;
   }
 };
 
@@ -97,8 +107,13 @@ const removeFromFavorites = async (id) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
       credentials: 'include',
-      body: JSON.stringify({ place_id: id }) // Передаем ID места для удаления
+      body: JSON.stringify({ place_id: id })
     });
+
+    if (response.status === 401) {
+      router.push({ name: 'login' });
+      return;
+    }
 
     if (response.ok) {
       favorites.value = favorites.value.filter(fav => fav.id !== id);
@@ -130,12 +145,5 @@ onMounted(loadFavorites);
 }
 .scroll-container::-webkit-scrollbar-thumb:hover {
   background-color: #aaa;
-}
-
-.no-photo {
-  width: 60px; 
-  height: 45px; 
-  font-size: 10px; 
-  line-height: 45px;
 }
 </style>

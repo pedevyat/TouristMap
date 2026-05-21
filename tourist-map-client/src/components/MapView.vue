@@ -109,8 +109,15 @@ async function loadPlacesFromWikidata(classQID) {
   }
 }
 
-// Переключение избранного (POST на бэкенд)
+// Переключение избранного
 async function toggleFavorite(place, starElement) {
+
+  if (!isAuthenticated.value) {
+    alert("Для добавления в избранное, войдите в свой аккаунт или зарегистрируйтесь");
+    router.push({ name: 'login' }); // Перенаправляем на страницу входа
+    return;
+  }
+
   const cityName = place.cityLabel ? place.cityLabel.value : "Неизвестно";
   try {
     const response = await fetch('http://127.0.0.1:8000/api/favorites/', {
@@ -127,6 +134,12 @@ async function toggleFavorite(place, starElement) {
     });
 
     const result = await response.json();
+    if (response.status === 401) {
+      isAuthenticated.value = false;
+      dbFavoritesIds.value = new Set();
+      alert("Сессия истекла. Пожалуйста, войдите снова");
+      return;
+    }
     if (response.ok) {
       if (result.status === 'added') {
         starElement.style.color = '#ffc107';
@@ -138,7 +151,7 @@ async function toggleFavorite(place, starElement) {
     }
   } catch (e) {
     console.error("Сетевая ошибка при добавлении в избранное:", e);
-    alert("Не удалось сохранить в избранное. Проверьте соединение с сервером.");
+    alert("Не удалось сохранить в избранное. Проверьте соединение с сервером");
   }
 }
 
