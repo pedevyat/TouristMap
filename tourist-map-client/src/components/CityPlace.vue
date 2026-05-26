@@ -46,7 +46,7 @@
     <div class="flex-grow-1 pe-2" v-if="places.length > 0">
       <div class="row row-cols-1 row-cols-md-3 g-4 pb-4">
         <div class="col" v-for="item in places" :key="item.id">
-          <div class="card h-100 shadow-sm border-0">
+          <div class="card h-100 shadow-sm border-0 position-relative">
             <img 
               :src="item.image" 
               class="card-img-top" 
@@ -54,7 +54,16 @@
               style="height: 200px; object-fit: cover;"
             />
             <div class="card-body d-flex flex-column">
-              <h5 class="card-title fw-bold text-dark fs-6">{{ item.name }}</h5>
+              <div class="d-flex justify-content-between align-items-start mb-2">
+                <h5 class="card-title fw-bold text-dark fs-6 mb-0 me-2">{{ item.name }}</h5>
+                <span class="favorite-star" 
+                      @click="toggleFavorite(item)"
+                      :style="{ cursor: 'pointer', fontSize: '22px', color: dbFavoritesIds.has(item.id) ? '#ffc107' : '#ccc', lineHeight: '1' }"
+                      title="Добавить в избранное">
+                  ★
+                </span>
+              </div>
+              
               <p class="card-text text-muted small flex-grow-1">{{ item.description }}</p>
               
               <div class="mt-2 d-flex justify-content-between align-items-center">
@@ -77,15 +86,42 @@
 
 <script setup>
 import { ref, onActivated, onDeactivated } from 'vue';
+import { useRouter } from 'vue-router'; 
+import { sendToggleFavoriteRequest } from '@/api/favoriteApi.js'; 
+
+const router = useRouter();
 
 const cityQuery = ref('');
 const places = ref([]);
 const isLoading = ref(false);
 const statusMessage = ref('');
 const scrollPosition = ref(0);
+const isAuthenticated = ref(false);
+const dbFavoritesIds = ref(new Set());
+
+// Загрузка избранного и проверка сессии
+const fetchDbFavorites = async () => {
+  try {
+    const response = await fetch('http://127.0.0.1:8000/api/favorites/', {
+      credentials: 'include'
+    });
+    if (response.ok) {
+      const data = await response.json();
+      dbFavoritesIds.value = new Set(data.map(item => item.id.split('/').pop()));
+      isAuthenticated.value = true;
+    } else if (response.status === 401 || response.status === 403) {
+      isAuthenticated.value = false;
+      dbFavoritesIds.value = new Set();
+    }
+  } catch (e) {
+    console.error("Не удалось подгрузить статус избранного:", e);
+  }
+};
 
 // Срабатывает, когда пользователь вернулся на эту страницу
-onActivated(() => {
+onActivated(async () => {
+  await fetchDbFavorites();
+
   window.scrollTo({
     top: scrollPosition.value,
     behavior: 'auto'
@@ -96,6 +132,46 @@ onActivated(() => {
 onDeactivated(() => {
   scrollPosition.value = window.scrollY || window.pageYOffset;
 });
+
+// Функция добавления/удаления
+const toggleFavorite = async (item) => {
+  if (!isAuthenticated.value) {
+    alert("Для добавления в избранное, войдите в свой аккаунт или зарегистрируйтесь");
+    router.push({ name: 'login' });
+    return;
+  }
+
+  const apiPlaceParam = {
+    place: { value: item.rawUri },
+    placeLabel: { value: item.name },
+    image: item.image && !item.image.includes('placehold.co') ? { value: item.image } : null,
+    coord: { value: item.coord },
+    cityLabel: { value: cityQuery.value.trim() || "Неизвестно" }
+  };
+
+  try {
+    const result = await sendToggleFavoriteRequest(apiPlaceParam);
+
+    if (result.status === 401) {
+      isAuthenticated.value = false;
+      dbFavoritesIds.value = new Set();
+      alert("Сессия истекла. Пожалуйста, войдите снова");
+      router.push({ name: 'login' });
+      return;
+    }
+
+    if (result.ok) {
+      if (result.data.status === 'added') {
+        dbFavoritesIds.value.add(item.id);
+      } else if (result.data.status === 'removed') {
+        dbFavoritesIds.value.delete(item.id);
+      }
+    }
+  } catch (e) {
+    console.error("Сетевая ошибка при изменении избранного:", e);
+    alert("Не удалось сохранить в избранное. Проверьте соединение с сервером");
+  }
+};
 
 // Геокодер Яндекса
 const getCoordinates = async (cityName) => {
@@ -192,8 +268,11 @@ const processCoordinatesSearch = async (lat, lng, radiusInKm = 30) => {
         filtered.push({
           id: item.place.value.split('/').pop(),
           name: item.placeLabel?.value || 'Без названия',
+          description: item.description?.value,
           image: item.image?.value || 'https://placehold.co/600x400?text=Нет+фото',
-          distance: distance.toFixed(1)
+          distance: distance.toFixed(1),
+          coord: item.coord.value,
+          rawUri: item.place.value
         });
       }
     }

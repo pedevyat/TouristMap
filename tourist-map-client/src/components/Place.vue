@@ -3,7 +3,15 @@
     <div class="container mt-5" v-if="place">
       <div class="row d-flex justify-content-between">
         <div class="col-md-6">
-          <h1 class="fw-bold text-black">{{ place.label }}</h1>
+          <h1 class="fw-bold text-black d-flex align-items-center">
+            {{ place.label }}
+            <span class="favorite-star ms-3" 
+                  @click="toggleFavorite"
+                  :style="{ cursor: 'pointer', fontSize: '32px', color: isFavorite ? '#ffc107' : '#ccc' }"
+                  title="Добавить в избранное">
+              ★
+            </span>
+          </h1>
           <p class="text-muted">{{ place.description }}</p>
           <li v-if="place.wikipedia">
               <a :href="place.wikipedia" target="_blank" rel="noopener noreferrer">
@@ -29,17 +37,83 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router'; 
+import { sendToggleFavoriteRequest } from '@/api/favoriteApi.js'; 
 
 const route = useRoute();
+const router = useRouter(); 
 const place = ref(null);
 const isLoading = ref(true);
+const isAuthenticated = ref(false);
+const isFavorite = ref(false);
+
+// Проверка авторизации и наличия текущего объекта в избранном
+const checkAuthAndFavoriteStatus = async (qid) => {
+  try {
+    const response = await fetch('http://127.0.0.1:8000/api/favorites/', {
+      credentials: 'include'
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      isAuthenticated.value = true;
+      
+      // бэкенд хранит полный URI Wikidata
+      const fullUri = `http://www.wikidata.org/entity/${qid}`;
+      isFavorite.value = data.some(item => item.id === fullUri || item.id === qid);
+    } else if (response.status === 401 || response.status === 403) {
+      isAuthenticated.value = false;
+      isFavorite.value = false;
+    }
+  } catch (e) {
+    console.error("Не удалось проверить статус избранного:", e);
+  }
+};
+
+// Функция переключения избранного
+const toggleFavorite = async () => {
+  if (!isAuthenticated.value) {
+    alert("Для добавления в избранное, войдите в свой аккаунт или зарегистрируйтесь");
+    router.push({ name: 'login' });
+    return;
+  }
+
+  const qid = route.params.id;
+  const apiPlaceParam = {
+    place: { value: `http://www.wikidata.org/entity/${qid}` },
+    placeLabel: { value: place.value.label },
+    image: place.value.image ? { value: place.value.image } : null,
+    coord: { value: place.value.coord },
+    cityLabel: { value: place.value.city }
+  };
+
+  try {
+    const result = await sendToggleFavoriteRequest(apiPlaceParam);
+
+    if (result.status === 401) {
+      isAuthenticated.value = false;
+      isFavorite.value = false;
+      alert("Сессия истекла. Пожалуйста, войдите снова");
+      router.push({ name: 'login' });
+      return;
+    }
+
+    if (result.ok) {
+      if (result.data.status === 'added') {
+        isFavorite.value = true;
+      } else if (result.data.status === 'removed') {
+        isFavorite.value = false;
+      }
+    }
+  } catch (e) {
+    console.error("Ошибка при изменении статуса избранного:", e);
+    alert("Не удалось сохранить в избранное. Проверьте соединение с сервером");
+  }
+};
 
 const fetchWikipediaExtract = async (wikiUrl) => {
   try {
     const title = decodeURIComponent(wikiUrl.split('/wiki/').pop());
-  
-    // exintro=1 "только введение", explaintext=1 убирает HTML-теги
     const apiUrl = `https://ru.wikipedia.org/w/api.php?action=query&format=json&prop=extracts&exintro=1&explaintext=1&titles=${title}&origin=*`;
     
     const response = await fetch(apiUrl);
@@ -49,8 +123,7 @@ const fetchWikipediaExtract = async (wikiUrl) => {
     const pages = data.query.pages;
     const pageId = Object.keys(pages)[0];
     
-    if (pageId === '-1') 
-      return null; // Статья не найдена
+    if (pageId === '-1') return null;
     
     const fullExtract = pages[pageId].extract;
     const firstParagraph = fullExtract.split('\n')[0];
@@ -124,8 +197,10 @@ const fetchFullInfo = async (qid) => {
 };
 
 onMounted(() => {
-  if (route.params.id) {
-    fetchFullInfo(route.params.id);
+  const qid = route.params.id;
+  if (qid) {
+    fetchFullInfo(qid);
+    checkAuthAndFavoriteStatus(qid); // Параллельно запрашиваем статус избранного
   }
 });
 </script>

@@ -5,6 +5,7 @@
 <script setup>
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { sendToggleFavoriteRequest } from '@/api/favoriteApi.js';
 const router = useRouter();
 
 let myMap = null;
@@ -37,41 +38,24 @@ const activeCategories = {
 
 // --- ЛОГИКА API ---
 
-// Функция для получения CSRF-токена из куки
-function getCookie(name) {
-  let cookieValue = null;
-  if (document.cookie && document.cookie !== '') {
-    const cookies = document.cookie.split(';');
-    for (let i = 0; i < cookies.length; i++) {
-      const cookie = cookies[i].trim();
-      if (cookie.substring(0, name.length + 1) === (name + '=')) {
-        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-        break;
-      }
-    }
-  }
-  return cookieValue;
-}
-
 // Загрузка избранного из Django
 const fetchDbFavorites = async () => {
-  // Если  пользователь не залогинен, не отправляем запрос
-  if (!isAuthenticated.value) {
-    dbFavoritesIds.value = new Set();
-    return;
-  }
-
   try {
-    const response = await fetch('http://127.0.0.1:8000/api/favorites/');
+    const response = await fetch('http://127.0.0.1:8000/api/favorites/', {
+      credentials: 'include' // передаем куки сессии
+    });
+
     if (response.ok) {
       const data = await response.json();
       dbFavoritesIds.value = new Set(data.map(item => item.id));
+      isAuthenticated.value = true; // Если сервер отдал данные, значит сессия активна!
     } else if (response.status === 401 || response.status === 403) {
-      isAuthenticated.value = false;
+      isAuthenticated.value = false; // Пользователь — гость, это нормально для карты
       dbFavoritesIds.value = new Set();
     }
   } catch (e) {
     console.error("Не удалось подгрузить избранное:", e);
+    isAuthenticated.value = false;
   }
 };
 
@@ -120,40 +104,29 @@ async function loadPlacesFromWikidata(classQID) {
 
 // Переключение избранного
 async function toggleFavorite(place, starElement) {
-
   if (!isAuthenticated.value) {
     alert("Для добавления в избранное, войдите в свой аккаунт или зарегистрируйтесь");
-    router.push({ name: 'login' }); // Перенаправляем на страницу входа
+    router.push({ name: 'login' });
     return;
   }
 
-  const cityName = place.cityLabel ? place.cityLabel.value : "Неизвестно";
   try {
-    const response = await fetch('http://127.0.0.1:8000/api/favorites/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-      credentials: 'include',
-      body: JSON.stringify({
-        place_id: place.place.value,
-        title: place.placeLabel.value,
-        image_url: place.image ? place.image.value : null,
-        coordinate: place.coord.value,
-        city: cityName
-      })
-    });
+    // Вызываем изолированную функцию
+    const result = await sendToggleFavoriteRequest(place);
 
-    const result = await response.json();
-    if (response.status === 401) {
+    if (result.status === 401) {
       isAuthenticated.value = false;
       dbFavoritesIds.value = new Set();
       alert("Сессия истекла. Пожалуйста, войдите снова");
+      router.push({ name: 'login' });
       return;
     }
-    if (response.ok) {
-      if (result.status === 'added') {
+
+    if (result.ok) {
+      if (result.data.status === 'added') {
         starElement.style.color = '#ffc107';
         dbFavoritesIds.value.add(place.place.value);
-      } else if (result.status === 'removed') {
+      } else if (result.data.status === 'removed') {
         starElement.style.color = '#ccc';
         dbFavoritesIds.value.delete(place.place.value);
       }
