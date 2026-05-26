@@ -3,7 +3,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { sendToggleFavoriteRequest } from '@/api/favoriteApi.js';
 const router = useRouter();
@@ -13,6 +13,8 @@ let mainClusterer = null;
 const isInitialized = ref(false);
 const dbFavoritesIds = ref(new Set());
 const isAuthenticated = ref(false);
+const mapRef = ref(null); 
+let mapResizeObserver = null;
 
 let museumsData = [];
 let parksData = [];
@@ -142,6 +144,19 @@ async function toggleFavorite(place, starElement) {
 onMounted(() => {
   if (isInitialized.value) return;
 
+  // --- НАЧАЛО БЛОКА ДИНАМИЧЕСКОГО РЕСАЙЗА ---
+  const mapContainer = document.getElementById('map');
+  if (mapContainer) {
+    mapResizeObserver = new ResizeObserver(() => {
+      // Проверяем, что карта уже создана и у нее есть метод перерасчета
+      if (typeof myMap !== 'undefined' && myMap && myMap.container) {
+        myMap.container.fitToViewport();
+      }
+    });
+    mapResizeObserver.observe(mapContainer);
+  }
+  // --- КОНЕЦ БЛОКА ДИНАМИЧЕСКОГО РЕСАЙЗА ---
+
   ymaps.ready(async () => {
 
     try {
@@ -161,6 +176,8 @@ onMounted(() => {
       center: [47.24, 39.71],
       zoom: 11,
       controls: ['zoomControl', 'typeSelector']
+    }, {
+      autoFitToViewport: 'always'
     });
 
     mainClusterer = new ymaps.Clusterer({
@@ -300,9 +317,25 @@ onMounted(() => {
     }
   });
 });
+
+onBeforeUnmount(() => {
+  if (mapResizeObserver) {
+    mapResizeObserver.disconnect();
+  }
+});
 </script>
 
-<style>
+<style scoped>
+#map {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
 :deep(.balloon-img) {
     background: url('https://i.gifer.com/ZKZg.gif') center center no-repeat;
     background-size: 30px;
