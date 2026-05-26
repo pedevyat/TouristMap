@@ -15,14 +15,22 @@
         <thead>
           <tr>
             <th scope="col" style="width: 80px;">Фото</th>
-            <th scope="col">Место</th>
-            <th scope="col">Город</th>
-            <th scope="col">Добавлено</th>
+            
+            <th scope="col" @click="sortBy('name')" class="sortable-header">
+              Место <span class="sort-icon">{{ getSortIcon('name') }}</span>
+            </th>
+            <th scope="col" @click="sortBy('city')" class="sortable-header">
+              Местность <span class="sort-icon">{{ getSortIcon('city') }}</span>
+            </th>
+            <th scope="col" @click="sortBy('date')" class="sortable-header">
+              Добавлено <span class="sort-icon">{{ getSortIcon('date') }}</span>
+            </th>
+            
             <th scope="col" class="text-end">Действие</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in favorites" :key="item.id">
+          <tr v-for="item in sortedFavorites" :key="item.id">
             <td>
               <img v-if="item.image" :src="item.image" 
                    class="rounded" 
@@ -50,12 +58,57 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
 const favorites = ref([]);
 const isFetching = ref(true);
+
+// Состояние сортировки
+const currentSortKey = ref('');      
+const currentSortOrder = ref('asc'); 
+
+// Функция переключения сортировки
+const sortBy = (key) => {
+  if (currentSortKey.value === key) {
+    currentSortOrder.value = currentSortOrder.value === 'asc' ? 'desc' : 'asc';
+  } else {
+    currentSortKey.value = key;
+    currentSortOrder.value = 'asc';
+  }
+};
+
+// Возвращает стрелочку для отображения в заголовке таблицы
+const getSortIcon = (key) => {
+  if (currentSortKey.value === key) 
+    return currentSortOrder.value === 'asc' ? '▲' : '▼';
+};
+
+// Вычисляемое свойство для фильтрации и сортировки
+const sortedFavorites = computed(() => {
+  if (!currentSortKey.value) return favorites.value;
+
+  return [...favorites.value].sort((a, b) => {
+    const modifier = currentSortOrder.value === 'asc' ? 1 : -1;
+    
+    let valA = a[currentSortKey.value];
+    let valB = b[currentSortKey.value];
+
+    // Сортировка дат
+    if (currentSortKey.value === 'date') {
+      const dateA = new Date(valA);
+      const dateB = new Date(valB);
+      if (!isNaN(dateA) && !isNaN(dateB)) {
+        return (dateA - dateB) * modifier;
+      }
+    }
+
+    valA = valA ? String(valA) : '';
+    valB = valB ? String(valB) : '';
+    return valA.localeCompare(valB, 'ru', { numeric: true, sensitivity: 'base' }) * modifier;
+  });
+});
 
 // Функция для получения CSRF-токена
 function getCookie(name) {
@@ -145,5 +198,20 @@ onMounted(loadFavorites);
 }
 .scroll-container::-webkit-scrollbar-thumb:hover {
   background-color: #aaa;
+}
+
+.sortable-header {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s ease;
+}
+.sortable-header:hover {
+  background-color: #f1f3f5;
+}
+.sort-icon {
+  display: inline-block;
+  margin-left: 5px;
+  font-size: 12px;
+  color: #6c757d;
 }
 </style>
