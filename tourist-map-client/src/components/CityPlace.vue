@@ -6,7 +6,7 @@
       
       <div class="row mb-4">
         <div class="col-md-8">
-          <label for="cityInput" class="form-label text-muted">Введите город или определите свое местоположение</label>
+          <label for="cityInput" class="form-label text-muted">Введите город или название объекта (например, Щепкинский лес)</label>
           <div class="input-group">
             <input 
               v-model="cityQuery" 
@@ -15,6 +15,7 @@
               id="cityInput" 
               class="form-control" 
               :disabled="isLoading"
+              placeholder="Поиск..."
             />
             <button 
               @click="searchPlaces" 
@@ -121,7 +122,6 @@ const fetchDbFavorites = async () => {
 // Срабатывает, когда пользователь вернулся на эту страницу
 onActivated(async () => {
   await fetchDbFavorites();
-
   window.scrollTo({
     top: scrollPosition.value,
     behavior: 'auto'
@@ -146,7 +146,7 @@ const toggleFavorite = async (item) => {
     placeLabel: { value: item.name },
     image: item.image && !item.image.includes('placehold.co') ? { value: item.image } : null,
     coord: { value: item.coord },
-    cityLabel: { value: cityQuery.value.trim() || "Неизвестно" }
+    cityLabel: { value: cityQuery.value.trim()  }
   };
 
   try {
@@ -210,7 +210,51 @@ const getBoundingBox = (lat, lng, radiusInKm = 30) => {
   };
 };
 
-// Запрос к Wikidata
+// Поиск объектов напрямую по текстовому названию
+const fetchPlacesByName = async (textQuery) => {
+  const query = `
+    SELECT DISTINCT ?place ?placeLabel ?coord ?image ?description WHERE {
+      # Полнотекстовый поиск Wikidata по ключевым словам
+      SERVICE wikibase:mwapi {
+        bd:serviceParam wikibase:api "EntitySearch" .
+        bd:serviceParam wikibase:endpoint "www.wikidata.org" .
+        bd:serviceParam mwapi:search "${textQuery}" .
+        bd:serviceParam mwapi:language "ru" .
+        ?place wikibase:apiOutputItem mwapi:item .
+      }
+      
+      ?place wdt:P17 wd:Q159 . 
+      ?place wdt:P625 ?coord . 
+      
+      # Проверка соответствия категориям проекта
+      VALUES ?type { 
+        wd:Q33506 wd:Q205391 wd:Q54173 wd:Q833017 wd:Q7075 # Музеи
+        wd:Q11742 wd:Q22698 wd:Q126877 wd:Q1496967          # Парки
+        wd:Q862454 wd:Q15631416 wd:Q3840711                 # Набережные
+        wd:Q11635 wd:Q153562 wd:Q1060165 wd:Q47928          # Культура
+        wd:Q8502                                            # Смотровые
+      }
+      ?place wdt:P31 ?type .
+      
+      OPTIONAL { ?place wdt:P18 ?image . }
+      OPTIONAL { ?place schema:description ?description . FILTER(LANG(?description) = "ru") }
+      FILTER NOT EXISTS { ?place wdt:P576 ?demolished. }
+      
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "ru". }
+    }
+  `;
+
+  const url = "https://query.wikidata.org/sparql";
+  const params = new URLSearchParams({ query: query, format: 'json' });
+  
+  const response = await fetch(`${url}?${params}`);
+  if (!response.ok) throw new Error(`Ошибка сервера Wikidata: ${response.status}`);
+  
+  const data = await response.json();
+  return data.results.bindings;
+};
+
+// Запрос к Wikidata по радиусу
 const fetchPlacesInRadius = async (lat, lng, radiusInKm = 30) => {
   const box = getBoundingBox(lat, lng, radiusInKm);
 
@@ -267,7 +311,7 @@ const processCoordinatesSearch = async (lat, lng, radiusInKm = 30) => {
       if (distance <= radiusInKm) {
         filtered.push({
           id: item.place.value.split('/').pop(),
-          name: item.placeLabel?.value || 'Без названия',
+          name: item.placeLabel?.value,
           description: item.description?.value,
           image: item.image?.value || 'https://placehold.co/600x400?text=Нет+фото',
           distance: distance.toFixed(1),
@@ -289,21 +333,68 @@ const processCoordinatesSearch = async (lat, lng, radiusInKm = 30) => {
 };
 
 const searchPlaces = async () => {
-  if (!cityQuery.value.trim()) return;
+  const queryText = cityQuery.value.trim();
+  if (!queryText) return;
 
   isLoading.value = true;
-  statusMessage.value = 'Определяем координаты города...';
+  statusMessage.value = 'Загрузка...';
   places.value = [];
   scrollPosition.value = 0;
 
   try {
-    const targetCoords = await getCoordinates(cityQuery.value.trim());
-    if (!targetCoords) {
-      statusMessage.value = 'Город не найден';
+    // сначала пробуем найти конкретные сущности по имени текстовым поиском Wikidata
+    const rawNameData = await fetchPlacesByName(queryText);
+    
+    // параллельно запросим координаты через Яндекс для расчета расстояния до искомого объекта
+    let refCoords = null;
+    try {
+      refCoords = await getCoordinates(queryText);
+    } catch (err) {
+      console.warn("Не удалось определить точку привязки координат для текста:", err);
+    }
+
+    if (rawNameData && rawNameData.length > 0) {
+      const filtered = [];
+      for (const item of rawNameData) {
+        if (!item.coord?.value) continue;
+        
+        const match = item.coord.value.match(/Point\(([-\d.]+)\s+([-\d.]+)\)/);
+        if (match) {
+          const itemLng = parseFloat(match[1]);
+          const itemLat = parseFloat(match[2]);
+          
+          // расстояние считаем от найденной геокодером точки объекта (будет около 0 км для точного совпадения)
+          const distance = refCoords ? calculateDistance(refCoords.lat, refCoords.lng, itemLat, itemLng) : 0;
+          
+          filtered.push({
+            id: item.place.value.split('/').pop(),
+            name: item.placeLabel?.value,
+            description: item.description?.value,
+            image: item.image?.value || 'https://placehold.co/600x400?text=Нет+фото',
+            distance: distance.toFixed(1),
+            coord: item.coord.value,
+            rawUri: item.place.value
+          });
+        }
+      }
+      
+      places.value = filtered.sort((a, b) => a.distance - b.distance);
+      statusMessage.value = `Найдено объектов по названию: ${filtered.length}`;
+      isLoading.value = false;
+      return; // Завершаем выполнение, так как нашли точечные объекты
+    }
+
+    // если текстовый поиск ничего не дал, значит ввели город
+    statusMessage.value = 'Ищем интересные места в радиусе 30 км...';
+    
+    if (!refCoords) {
+      statusMessage.value = 'Ничего не найдено';
       isLoading.value = false;
       return;
     }
-    await processCoordinatesSearch(targetCoords.lat, targetCoords.lng, 30);
+    
+    await processCoordinatesSearch(refCoords.lat, refCoords.lng, 30);
+
   } catch (error) {
     console.error(error);
     statusMessage.value = 'Не удалось загрузить данные. Попробуйте позже.';
