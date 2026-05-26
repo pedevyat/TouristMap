@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import MapView from '../components/MapView.vue'
+import MapView from '../views/MapView.vue'
 
 const routes = [
   {
@@ -10,28 +10,28 @@ const routes = [
   {
     path: '/login',
     name: 'login',
-    component: () => import('@/components/registration/Login.vue')
+    component: () => import('@/views/registration/Login.vue')
   },
   {
     path: '/signup',
     name: 'signup',
-    component: () => import('@/components/registration/Registration.vue')
+    component: () => import('@/views/registration/Registration.vue')
   },
   {
     path: '/favorite',
     name: 'favorite',
-    component: () => import('@/components/Favorite.vue')
+    component: () => import('@/views/Favorite.vue')
   },
   {
     path: '/place/:id',
     name: 'Place',
-    component: () => import('@/components/Place.vue'),
+    component: () => import('@/views/Place.vue'),
     props: true
   },
   {
     path: '/selection',
     name: 'CityPlace',
-    component: () => import('@/components/CityPlace.vue'),
+    component: () => import('@/views/CityPlace.vue'),
     props: true
   },
 ]
