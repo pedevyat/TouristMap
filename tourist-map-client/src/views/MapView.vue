@@ -6,6 +6,9 @@
 import { onMounted, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { sendToggleFavoriteRequest } from '@/api/favoriteApi.js';
+// 1. Импортируем наш новый слой API
+import { placesApi } from '@/api/placesApi.js';
+
 const router = useRouter();
 
 let myMap = null;
@@ -16,6 +19,7 @@ const isAuthenticated = ref(false);
 const mapRef = ref(null); 
 let mapResizeObserver = null;
 
+// Списки объектов теперь будут хранить чистые плоские массивы от Django
 let museumsData = [];
 let parksData = [];
 let embankmentsData = [];
@@ -40,19 +44,20 @@ const activeCategories = {
 
 // --- ЛОГИКА API ---
 
-// Загрузка избранного из Django
+// Загрузка избранного из Django (сохраняем, очистив ID до QID)
 const fetchDbFavorites = async () => {
   try {
     const response = await fetch('http://127.0.0.1:8000/api/favorites/', {
-      credentials: 'include' // передаем куки сессии
+      credentials: 'include'
     });
 
     if (response.ok) {
       const data = await response.json();
-      dbFavoritesIds.value = new Set(data.map(item => item.id));
-      isAuthenticated.value = true; // Если сервер отдал данные, значит сессия активна!
+      // Храним чистые QID (например, 'Q12345'), как и в SelectionView
+      dbFavoritesIds.value = new Set(data.map(item => item.id.split('/').pop()));
+      isAuthenticated.value = true;
     } else if (response.status === 401 || response.status === 403) {
-      isAuthenticated.value = false; // Пользователь — гость, это нормально для карты
+      isAuthenticated.value = false;
       dbFavoritesIds.value = new Set();
     }
   } catch (e) {
@@ -61,50 +66,7 @@ const fetchDbFavorites = async () => {
   }
 };
 
-// Загрузка данных из Wikidata
-async function loadPlacesFromWikidata(classQID) {
-  let categoryFilter;
-  if (classQID === 'Q11742') {
-    categoryFilter = `VALUES ?type { wd:Q11742 wd:Q22698 wd:Q126877 wd:Q1496967 } ?place wdt:P31 ?type.`;
-  } else if (classQID === 'Q862454') {
-    categoryFilter = `VALUES ?type { wd:Q862454 wd:Q15631416 wd:Q3840711 } ?place wdt:P31 ?type.`;
-  } else if (classQID === 'Q33506') {
-    categoryFilter = `VALUES ?type { wd:Q33506 wd:Q205391 wd:Q54173 wd:Q833017 wd:Q7075 } ?place wdt:P31 ?type.`;
-   } else if (classQID === 'Q24354') {
-    categoryFilter = `VALUES ?type { wd:Q11635 wd:Q153562 wd:Q1060165 wd:Q47928 wd:Q11812394 wd:Q16889960 } ?place wdt:P31 ?type.`;
-  } else if (classQID === 'Q2035041') {
-    categoryFilter = `VALUES ?type { wd:Q8502 } ?place wdt:P31 ?type.`;
-  }
-
-  const query = `
-    SELECT DISTINCT ?place ?placeLabel ?coord ?image ?cityLabel WHERE {
-      ?place wdt:P17 wd:Q159 . 
-      ?place wdt:P625 ?coord .
-      ${categoryFilter}
-      ?place wdt:P18 ?image . 
-      OPTIONAL { ?place wdt:P131 ?city. }
-      FILTER NOT EXISTS { ?place wdt:P576 ?demolished. }
-      FILTER NOT EXISTS { ?place wdt:P31/wdt:P279* wd:Q12269557. }
-      SERVICE wikibase:label { bd:serviceParam wikibase:language "ru". }
-    }
-  `;
-
-  const url = "https://query.wikidata.org/sparql";
-  const params = new URLSearchParams({ query: query, format: 'json' });
-  
-  try {
-    const response = await fetch(`${url}?${params}`);
-    if (response.status === 429) return [];
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    const data = await response.json();
-    return data.results.bindings;
-  } catch (e) {
-    console.error("Ошибка Wikidata:", e);
-    return [];
-  }
-}
-
-// Переключение избранного
+// Переключение избранного (адаптировано под плоскую структуру)
 async function toggleFavorite(place, starElement) {
   if (!isAuthenticated.value) {
     alert("Для добавления в избранное, войдите в свой аккаунт или зарегистрируйтесь");
@@ -112,9 +74,17 @@ async function toggleFavorite(place, starElement) {
     return;
   }
 
+  // Приводим объект к формату, который ожидает твоя функция sendToggleFavoriteRequest
+  const apiPlaceParam = {
+    place: { value: `http://www.wikidata.org/entity/${place.id}` },
+    placeLabel: { value: place.name },
+    image: place.image && !place.image.includes('placehold.co') ? { value: place.image } : null,
+    coord: { value: place.coord },
+    cityLabel: { value: place.city || "Неизвестно" }
+  };
+
   try {
-    // Вызываем изолированную функцию
-    const result = await sendToggleFavoriteRequest(place);
+    const result = await sendToggleFavoriteRequest(apiPlaceParam);
 
     if (result.status === 401) {
       isAuthenticated.value = false;
@@ -127,10 +97,10 @@ async function toggleFavorite(place, starElement) {
     if (result.ok) {
       if (result.data.status === 'added') {
         starElement.style.color = '#ffc107';
-        dbFavoritesIds.value.add(place.place.value);
+        dbFavoritesIds.value.add(place.id);
       } else if (result.data.status === 'removed') {
         starElement.style.color = '#ccc';
-        dbFavoritesIds.value.delete(place.place.value);
+        dbFavoritesIds.value.delete(place.id);
       }
     }
   } catch (e) {
@@ -144,21 +114,17 @@ async function toggleFavorite(place, starElement) {
 onMounted(() => {
   if (isInitialized.value) return;
 
-  // --- НАЧАЛО БЛОКА ДИНАМИЧЕСКОГО РЕСАЙЗА ---
   const mapContainer = document.getElementById('map');
   if (mapContainer) {
     mapResizeObserver = new ResizeObserver(() => {
-      // Проверяем, что карта уже создана и у нее есть метод перерасчета
       if (typeof myMap !== 'undefined' && myMap && myMap.container) {
         myMap.container.fitToViewport();
       }
     });
     mapResizeObserver.observe(mapContainer);
   }
-  // --- КОНЕЦ БЛОКА ДИНАМИЧЕСКОГО РЕСАЙЗА ---
 
   ymaps.ready(async () => {
-
     try {
       const authCheck = await fetch('http://127.0.0.1:8000/api/login/', { credentials: 'include' });
       if (authCheck.ok) {
@@ -170,6 +136,7 @@ onMounted(() => {
     } catch (e) {
       console.log("Пользователь не авторизован");
     }
+    
     await fetchDbFavorites();
 
     myMap = new ymaps.Map("map", {
@@ -182,8 +149,8 @@ onMounted(() => {
 
     mainClusterer = new ymaps.Clusterer({
       preset: 'islands#invertedOliveClusterIcons', 
-      groupByCoordinates: false,          // Не группировать только строго совпадающие координаты
-      clusterDisableClickZoom: false,     // Зум при клике на кластер включен
+      groupByCoordinates: false,
+      clusterDisableClickZoom: false,
       clusterHideIconOnBalloonOpen: false,
       geoObjectHideIconOnBalloonOpen: false
     });
@@ -191,47 +158,42 @@ onMounted(() => {
     myMap.geoObjects.add(mainClusterer);
     const allPlacemarks = [];
 
-    // Функция отрисовки
+    // 2. РЕФАКТОРИНГ: Отрисовка работает с плоскими полями (без .value)
     const renderPlaces = (data, categoryKey) => {
       const placemarksToAddToCluster = [];
 
       data.forEach(item => {
-        const placeId = item.place.value;
-        const match = item.coord.value.match(/Point\(([-0-9.]+) ([-0-9.]+)\)/);
+        const placeId = item.id; // Чистый QID
+        const match = item.coord.match(/Point\(([-0-9.]+) ([-0-9.]+)\)/);
         if (!match) return;
 
         const isFav = dbFavoritesIds.value.has(placeId);
         const starColor = isFav ? '#ffc107' : '#ccc';
-        const qid = item.place.value.split('/').pop();
 
         const html = `
           <div style="max-width: 200px; font-family: sans-serif;">
             <div style="display: flex; justify-content: space-between;">
-              <strong style="font-size: 14px;">${item.placeLabel.value}</strong>
+              <strong style="font-size: 14px;">${item.name}</strong>
               <span class="favorite-star" data-id="${placeId}" 
                     style="cursor: pointer; font-size: 20px; color: ${starColor};">★</span>
             </div>
-            ${item.image ? `<img src="${item.image.value}" class="balloon-img" style="width:100%; margin-top:8px; border-radius:4px;"/>` : ''}
+            ${item.image ? `<img src="${item.image}" class="balloon-img" style="width:100%; margin-top:8px; border-radius:4px;"/>` : ''}
             <div style="margin-top: 10px;">
-              <a href="#" class="detail-link" data-qid="${qid}" style="color: #007bff; font-size: 13px; text-decoration: none;">Подробнее</a>
+              <a href="#" class="detail-link" data-qid="${placeId}" style="color: #007bff; font-size: 13px; text-decoration: none;">Подробнее</a>
             </div>
           </div>`;
 
-        // Создаем метку и задаем ей персональный иконку-пресет категории
         const placemark = new ymaps.Placemark(
           [parseFloat(match[2]), parseFloat(match[1])],
           { balloonContent: html },
           { preset: categoryPresets[categoryKey] }
         );
 
-        // Сохраняем категорию прямо внутри параметров метки для фильтрации
         placemark.categoryId = categoryKey;
-
         allPlacemarks.push(placemark);
         placemarksToAddToCluster.push(placemark);
       });
 
-      // Добавляем пачку меток в наш общий кластер
       mainClusterer.add(placemarksToAddToCluster);
     };
 
@@ -267,14 +229,14 @@ onMounted(() => {
     });
     myMap.controls.add(listBox);
 
-    // Делегирование
+    // Делегирование кликов в балунах
     document.addEventListener('click', async (e) => {
       const starBtn = e.target.closest('.favorite-star');
       if (starBtn) {
         e.stopPropagation();
         const placeId = starBtn.getAttribute('data-id');
         const allData = [...museumsData, ...parksData, ...embankmentsData, ...culturalData, ...viewsData];
-        const place = allData.find(p => p.place.value === placeId);
+        const place = allData.find(p => p.id === placeId);
         if (place) await toggleFavorite(place, starBtn);
         return;
       }
@@ -287,33 +249,31 @@ onMounted(() => {
       }
     });
 
-    // Загрузка данных
-    const sleep = (ms) => new Promise(res => setTimeout(res, ms));
-    
+    // Загрузка данных: теперь строго по очереди, чтобы не перегружать Wikidata
     try {
-      museumsData = await loadPlacesFromWikidata('Q33506');
-      renderPlaces(museumsData, 'museums');
-      await sleep(1000); 
+      // 1. Музеи
+      museumsData = await placesApi.getByCategory('Q33506');
+      if (museumsData.length) renderPlaces(museumsData, 'museums');
 
-      parksData = await loadPlacesFromWikidata('Q11742');
-      renderPlaces(parksData, 'parks');
-      await sleep(1000);
+      // 2. Парки
+      parksData = await placesApi.getByCategory('Q11742');
+      if (parksData.length) renderPlaces(parksData, 'parks');
 
-      embankmentsData = await loadPlacesFromWikidata('Q862454');
-      renderPlaces(embankmentsData, 'embankments');
-      await sleep(1000);
+      // 3. Набережные
+      embankmentsData = await placesApi.getByCategory('Q862454');
+      if (embankmentsData.length) renderPlaces(embankmentsData, 'embankments');
 
-      culturalData = await loadPlacesFromWikidata('Q24354');
-      renderPlaces(culturalData, 'cultural');
-      await sleep(1000);
+      // 4. Культурные места
+      culturalData = await placesApi.getByCategory('Q24354');
+      if (culturalData.length) renderPlaces(culturalData, 'cultural');
 
-      viewsData = await loadPlacesFromWikidata('Q2035041');
-      renderPlaces(viewsData, 'views');
-      await sleep(1000);
+      // 5. Смотровые площадки
+      viewsData = await placesApi.getByCategory('Q2035041');
+      if (viewsData.length) renderPlaces(viewsData, 'views');
 
       isInitialized.value = true;
     } catch (err) {
-      console.error("Ошибка данных:", err);
+      console.error("Ошибка при поочередной загрузке данных:", err);
     }
   });
 });

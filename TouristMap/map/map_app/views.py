@@ -7,6 +7,17 @@ from .models import Place, Favorite, Category, City, PlaceImage
 import re
 from django.contrib.gis.geos import Point
 from django.contrib.auth.models import User
+import requests
+from django.views.decorators.http import require_GET
+from django.views.decorators.cache import cache_page
+
+CATEGORY_MAPPING = {
+    'Q11742': 'VALUES ?type { wd:Q11742 wd:Q22698 wd:Q126877 wd:Q1496967 } ?place wdt:P31 ?type.',
+    'Q862454': 'VALUES ?type { wd:Q862454 wd:Q15631416 wd:Q3840711 } ?place wdt:P31 ?type.',
+    'Q33506': 'VALUES ?type { wd:Q33506 wd:Q205391 wd:Q54173 wd:Q833017 wd:Q7075 } ?place wdt:P31 ?type.',
+    'Q24354': 'VALUES ?type { wd:Q11635 wd:Q153562 wd:Q1060165 wd:Q47928 wd:Q11812394 wd:Q16889960 } ?place wdt:P31 ?type.',
+    'Q2035041': 'VALUES ?type { wd:Q8502 } ?place wdt:P31 ?type.'
+}
 
 # Create your views here.
 def index(request):
@@ -157,3 +168,65 @@ def api_toggle_favorite(request):
             # Выводим ошибку в консоль сервера, чтобы вы видели, что именно пошло не так
             print(f"Ошибка в api_toggle_favorite: {str(e)}")
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+        
+@require_GET
+@cache_page(60 * 60 * 24)
+def get_wikidata_places(request):
+    class_qid = request.GET.get('classQID')
+    
+    if not class_qid or class_qid not in CATEGORY_MAPPING:
+        return JsonResponse({'error': 'Неверный или отсутствующий параметр classQID'}, status=400)
+    
+    category_filter = CATEGORY_MAPPING[class_qid]
+    
+    # Формируем SPARQL запрос
+    sparql_query = f"""
+    SELECT DISTINCT ?place ?placeLabel ?coord ?image ?cityLabel WHERE {{
+      ?place wdt:P17 wd:Q159 . 
+      ?place wdt:P625 ?coord .
+      {category_filter}
+      ?place wdt:P18 ?image . 
+      OPTIONAL {{ ?place wdt:P131 ?city. }}
+      FILTER NOT EXISTS {{ ?place wdt:P576 ?demolished. }}
+      FILTER NOT EXISTS {{ ?place wdt:P31/wdt:P279* wd:Q12269557. }}
+      SERVICE wikibase:label {{ bd:serviceParam wikibase:language "ru". }}
+    }}
+    """
+    
+    wikidata_url = "https://query.wikidata.org/sparql"
+    headers = {
+        # Замени на данные своего проекта, чтобы Wikidata не банила запросы
+        'User-Agent': 'TouristMapApp/1.0 (konstantin@example.com)' 
+    }
+    params = {
+        'query': sparql_query,
+        'format': 'json'
+    }
+    
+    try:
+        response = requests.get(wikidata_url, params=params, headers=headers, timeout=30)
+        
+        if response.status_code == 429:
+            return JsonResponse({'error': 'Слишком много запросов к Wikidata'}, status=429)
+            
+        response.raise_for_status()
+        raw_data = response.json()
+        
+        # Парсим и «выпрямляем» сложную структуру Wikidata в плоский JSON для фронтенда
+        bindings = raw_data.get('results', {}).get('bindings', [])
+        cleaned_places = []
+        
+        for item in bindings:
+            cleaned_places.append({
+                'id': item.get('place', {}).get('value', '').split('/')[-1],
+                'name': item.get('placeLabel', {}).get('value', 'Без названия'),
+                'coord': item.get('coord', {}).get('value', ''),
+                'image': item.get('image', {}).get('value', ''),
+                'city': item.get('cityLabel', {}).get('value', '')
+            })
+            
+        return JsonResponse(cleaned_places, safe=False, json_dumps_params={'ensure_ascii': False})
+        
+    except requests.exceptions.RequestException as e:
+        print(f"Ошибка при запросе к Wikidata: {e}")
+        return JsonResponse({'error': 'Ошибка сервера при получении данных'}, status=500)
