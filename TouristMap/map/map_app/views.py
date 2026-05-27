@@ -10,6 +10,8 @@ from django.contrib.auth.models import User
 import requests
 from django.views.decorators.http import require_GET
 from django.views.decorators.cache import cache_page
+from django.core.mail import send_mail
+from django.core.signing import Signer
 
 CATEGORY_MAPPING = {
     'Q11742': 'VALUES ?type { wd:Q11742 wd:Q22698 wd:Q126877 wd:Q1496967 } ?place wdt:P31 ?type.',
@@ -28,15 +30,34 @@ def api_login(request):
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
-            user = authenticate(username=data.get('username'), password=data.get('password'))
-            if user is not None:
-                login(request, user)
-                return JsonResponse({'status': 'ok', 'username': user.username})
-            return JsonResponse({'status': 'error', 'message': 'Неверные данные'}, status=401)
+            username = data.get('username')
+            password = data.get('password')
+
+            # явная проверка существования, пароля и активации почты
+            try:
+                user = User.objects.get(username=username)
+                
+                # Проверяем правильность пароля
+                if user.check_password(password):
+                    # Если пароль верный, но почта НЕ подтверждена
+                    if not user.is_active:
+                        return JsonResponse({
+                            'status': 'error', 
+                            'message': 'Ваш аккаунт еще не активирован! Пожалуйста, подтвердите Email по ссылке из письма.'
+                        }, status=403) # 403 Forbidden
+                    
+                    # Если активен — авторизуем в сессии
+                    login(request, user)
+                    return JsonResponse({'status': 'ok', 'username': user.username})
+                else:
+                    return JsonResponse({'status': 'error', 'message': 'Неверное имя пользователя или пароль'}, status=401)
+                    
+            except User.DoesNotExist:
+                return JsonResponse({'status': 'error', 'message': 'Неверное имя пользователя или пароль'}, status=401)
+
         except json.JSONDecodeError:
             return JsonResponse({'status': 'error', 'message': 'Ошибка данных'}, status=400)
             
-    # ОБЯЗАТЕЛЬНО возвращаем ответ для GET запроса (чтобы установилась куки)
     return JsonResponse({'status': 'waiting_for_post'})
 
 @csrf_exempt
@@ -55,16 +76,49 @@ def api_register(request):
             username = data.get('username')
             email = data.get('email')
             password = data.get('password')
+
             if not username or not email or not password:
                 return JsonResponse({'status': 'error', 'message': 'Заполните все поля'}, status=400)
+            
+            if User.objects.filter(username=username).exists():
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Пользователь с таким именем уже существует. Пожалуйста, придумайте другое имя.'
+                }, status=400)
+            
             # проверка занятости email
             if User.objects.filter(email=email).exists():
                 return JsonResponse({'status': 'error', 'message': 'Этот email уже зарегистрирован'}, status=400)
 
             # используем create_user, чтобы Django автоматически захешировал пароль
-            user = User.objects.create_user(username=username, email=email, password=password)
-            # Автоматически авторизуем пользователя сразу после регистрации
-            login(request, user)
+            user = User.objects.create_user(username=username, email=email, password=password, is_active=False)
+
+            # Генерация временного токена (с отметкой времени)
+            from django.core.signing import TimestampSigner
+            signer = TimestampSigner()
+            token = signer.sign(username)
+            activation_url = f"http://127.0.0.1:5173/verify-email?token={token}"
+
+            # Отправка письма (настройки SMTP/Resend берутся из settings.py)
+            send_mail(
+                subject="Подтверждение регистрации в ВикиТурист",
+                message=f"Для подтверждения регистрации перейдите по ссылке: {activation_url}",
+                from_email="ВикиТурист <onboarding@resend.dev>",
+                recipient_list=[email],
+                html_message=f"""
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
+                        <h3 style="color: #333;">Добро пожаловать в ВикиТурист!</h3>
+                        <p style="color: #666;">Спасибо за регистрацию в нашем сервисе. Для активации вашего аккаунта и подтверждения адреса электронной почты нажмите на кнопку ниже:</p>
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="{activation_url}" style="background-color: #4AAE8A; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+                                Подтвердить Email
+                            </a>
+                        </div>
+                        <p style="font-size: 12px; color: #999; text-align: center;">Ссылка действительна в течение 24 часов.</p>
+                    </div>
+                """,
+            )
+
 
             return JsonResponse({
                 'status': 'ok',
@@ -77,6 +131,56 @@ def api_register(request):
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': f'Внутренняя ошибка сервера: {str(e)}'}, status=500)
 
+    return JsonResponse({'status': 'error', 'message': 'Метод не поддерживается'}, status=405)
+
+@csrf_exempt
+def api_verify_email(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            token = data.get('token')
+            
+            if not token:
+                return JsonResponse({'status': 'error', 'message': 'Токен подтверждения отсутствует'}, status=400)
+            
+            from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
+            signer = TimestampSigner()
+            
+            try:
+                # Проверяем подпись токена и его возраст (86400 секунд = 24 часа)
+                username = signer.unsign(token, max_age=86400)
+            except SignatureExpired:
+                return JsonResponse({'status': 'error', 'message': 'Срок действия ссылки подтверждения истек'}, status=400)
+            except BadSignature:
+                return JsonResponse({'status': 'error', 'message': 'Недействительный или поврежденный токен'}, status=400)
+            
+            try:
+                user = User.objects.get(username=username)
+                
+                if user.is_active:
+                    return JsonResponse({'status': 'ok', 'message': 'Аккаунт уже был успешно активирован ранее'})
+                
+                # Активируем пользователя
+                user.is_active = True
+                user.save()
+                
+                # Автоматически авторизуем пользователя в сессии после успешной активации
+                login(request, user)
+                
+                return JsonResponse({
+                    'status': 'ok',
+                    'message': 'Электронная почта успешно подтверждена. Вход выполнен.',
+                    'username': user.username
+                })
+                
+            except User.DoesNotExist:
+                return JsonResponse({'status': 'error', 'message': 'Пользователь, связанный с этим токеном, не найден'}, status=404)
+                
+        except json.JSONDecodeError:
+            return JsonResponse({'status': 'error', 'message': 'Ошибка чтения формата данных JSON'}, status=400)
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': f'Внутренняя ошибка при верификации: {str(e)}'}, status=500)
+            
     return JsonResponse({'status': 'error', 'message': 'Метод не поддерживается'}, status=405)
 
 @csrf_exempt

@@ -29,4 +29,5 @@ urlpatterns = [
     path('api/logout/', views.api_logout, name='api_logout'),
     path('api/register/', views.api_register, name='api_register'),
     path('api/favorites/', api_toggle_favorite, name='favorite-add'),
+    path('api/verify-email/', views.api_verify_email, name='api_verify_email'),
 ]

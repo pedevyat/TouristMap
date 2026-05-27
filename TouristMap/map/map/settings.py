@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'django.contrib.gis',
     'rest_framework',
     'corsheaders',
+    'anymail',
     'map_app'
 ]
 
@@ -136,7 +137,14 @@ MEDIA_URL = '/media/'
 
 SESSION_SAVE_EVERY_REQUEST = True
 
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_BACKEND = "anymail.backends.resend.EmailBackend"
+# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+ANYMAIL = {
+    "RESEND_API_KEY": os.environ.get("RESEND_API_KEY", "re_R388Q8Mj_4KmHbUCV85SJXHaRWtkn91nd"),
+}
+
+DEFAULT_FROM_EMAIL = "WikiTourist <onboarding@resend.dev>"
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",

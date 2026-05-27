@@ -34,6 +34,12 @@ const routes = [
     component: () => import('@/views/CityPlace.vue'),
     props: true
   },
+  {
+    path: '/verify-email',
+    name: 'VerifyEmail',
+    component: () => import('@/views/VerifyEmailView.vue'),
+    meta: { requiresAuth: false }
+  }
 ]
 
 const router = createRouter({

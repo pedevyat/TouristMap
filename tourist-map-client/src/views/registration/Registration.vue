@@ -115,15 +115,20 @@ const handleRegister = async () => {
     );
     
     if (response.data.status === 'ok') {
-      successMessage.value = 'Загрузка...';
-      if (response.data.username) {
-        localStorage.setItem('username', response.data.username);
-      }
+      successMessage.value = response.data.message;
+      
+      // Очищаем форму
+      registerForm.username = '';
+      registerForm.email = '';
+      registerForm.password = '';
+      registerForm.passwordConfirm = '';
+
+      // ИСПРАВЛЕНО: Перенаправляем на страницу подтверждения почты
       setTimeout(() => {
-        router.push({ name: 'home' }).then(() => {
-          location.reload(); 
-        });
-      }, 1500);
+        // ВАЖНО: Проверь в файле src/router/index.js, какое именно 'name' 
+        // указано для компонента VerifyEmailView.vue (например, 'verify-email')
+        router.push({ name: 'VerifyEmail' }); 
+      }, 2500); // 2.5 секунды вполне достаточно, чтобы прочитать сообщение
     }
   } catch (err) {
     console.error('Ошибка регистрации:', err.response);
@@ -133,7 +138,7 @@ const handleRegister = async () => {
     } else if (err.response && err.response.data && err.response.data.error) {
       error.value = err.response.data.error;
     } else {
-      error.value = 'Ошибка';
+      error.value = 'Ошибка при регистрации. Попробуйте позже.';
     }
   } finally {
     isLoading.value = false;
