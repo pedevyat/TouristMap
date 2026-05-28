@@ -3,7 +3,7 @@ from django.http import HttpResponse, JsonResponse
 from django.contrib.auth import authenticate, login, logout
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 import json
-from .models import Place, Favorite, Category, City, PlaceImage
+from .models import Place, Favorite
 import re
 from django.contrib.gis.geos import Point
 from django.contrib.auth.models import User
@@ -189,87 +189,57 @@ def api_toggle_favorite(request):
         return JsonResponse({'status': 'error', 'message': 'Требуется авторизация'}, status=401)
     
     user = request.user
-    # Получение всех избранных мест пользователя
     if request.method == 'GET':
-        # Подгружаем связанные данные через select_related для оптимизации
-        favorites = Favorite.objects.filter(user=user).select_related('place', 'place__city')
+        favorites = Favorite.objects.filter(user=user)
         
         results = []
         for fav in favorites:
-            main_image = fav.place.images.filter(is_main=True).first()
-            image_path = main_image.image if main_image else None
             results.append({
-                'id': fav.place.external_id,      # QID из Wikidata
-                'name': fav.place.name,           # Название
-                'city': fav.place.city.name,      # Город
+                'id': fav.wikidata_id,
+                'name': fav.place_label or "Без названия",
+                'city': fav.city or "", 
                 'region': " ",
                 'date': fav.added_at.strftime("%d.%m.%Y"), 
-                'image': image_path,
-                'coordinate': f"{fav.place.location.x}, {fav.place.location.y}"
+                'image': fav.image_url,
+                'coordinate': "0, 0"
             })
         return JsonResponse(results, safe=False)
-
-    # Добавление или удаление из избранного
+    
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
-            external_id = data.get('place_id')
+            raw_place_id = data.get('place_id', '')
             
-            if not external_id:
-                return JsonResponse({'status': 'error', 'message': 'No place_id provided'}, status=400)
+            if '/' in raw_place_id:
+                qid = raw_place_id.split('/')[-1]
+            else:
+                qid = raw_place_id
             
-            # Проверяем избранное по внешнему ID места
-            existing_fav = Favorite.objects.filter(user=user, place__external_id=external_id).first()
+            if not qid:
+                return JsonResponse({'status': 'error', 'message': 'Не передан place_id'}, status=400)
+            
+            existing_fav = Favorite.objects.filter(user=user, wikidata_id=qid).first()
 
             if existing_fav:
                 existing_fav.delete()
                 return JsonResponse({'status': 'removed'})
 
-            # Обработка координат
-            coord_raw = data.get('coordinate', '')
-            try:
-                # Извлекаем все числа (включая отрицательные и дробные)
-                coords = re.findall(r"[-+]?\d*\.\d+|\d+", coord_raw)
-                if len(coords) >= 2:
-                    # Wikidata отдает Longitude Latitude. Django Point(x, y) ждет так же.
-                    point = Point(float(coords[0]), float(coords[1]))
-                else:
-                    raise ValueError("Недостаточно данных для координат")
-            except Exception:
-                point = Point(39.71, 47.24)
-
-            category, _ = Category.objects.get_or_create(name="Культура", defaults={'slug': 'culture'})
-            city_name = data.get('city')
-            city, _ = City.objects.get_or_create(name=city_name)
-
-            # Создаем или обновляем Место
-            # Используем .truncate() или срезаем строку, если имя слишком длинное для БД
-            name = data.get('title', 'Без названия')[:250] 
-
-            place, _ = Place.objects.update_or_create(
-                external_id=external_id,
-                defaults={
-                    'name': name,
-                    'category': category,
-                    'city': city,
-                    'location': point,
-                    'address': data.get('address', 'Адрес не указан')[:250],
-                }
-            )
+            # Достаем название, картинку И местность из прилетевшего JSON
+            title = data.get('title', '')[:255]
             image_url = data.get('image_url')
-            if image_url:
-                PlaceImage.objects.update_or_create(
-                    place=place,
-                    is_main=True,
-                    defaults={'image': image_url}
-                )
-            # Создаем избранное (используем get_or_create во избежание дублей)
-            Favorite.objects.get_or_create(user=user, place=place)
+            city_name = data.get('city', '')[:255] 
+
+            Favorite.objects.create(
+                user=user,
+                wikidata_id=qid,
+                place_label=title,
+                image_url=image_url,
+                city=city_name                   
+            )
             
             return JsonResponse({'status': 'added'})
 
         except Exception as e:
-            # Выводим ошибку в консоль сервера, чтобы вы видели, что именно пошло не так
             print(f"Ошибка в api_toggle_favorite: {str(e)}")
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
         

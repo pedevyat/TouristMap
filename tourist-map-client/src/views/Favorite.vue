@@ -40,7 +40,11 @@
                 ?
               </div>
             </td>
-            <td><span class="fw-bold text-dark">{{ item.name }}</span></td>
+            <td>
+              <span @click="goToPlace(item.id)" class="fw-bold text-dark place-title-link" style="cursor: pointer;">
+                {{ item.name }}
+              </span>
+            </td>
             <td><span class="text-secondary">{{ item.city }}</span></td>
             <td>
               <small class="text-muted">{{ item.date }}</small>
@@ -174,6 +178,10 @@ const removeFromFavorites = async (id) => {
   } catch (error) {
     console.error("Ошибка при удалении:", error);
   }
+};
+
+const goToPlace = (id) => {
+  router.push({ name: 'Place', params: { id: id } });
 };
 
 onMounted(loadFavorites);
