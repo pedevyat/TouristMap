@@ -11,7 +11,11 @@ import requests
 from django.views.decorators.http import require_GET
 from django.views.decorators.cache import cache_page
 from django.core.mail import send_mail
-from django.core.signing import Signer
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes, force_str
+from django.core.mail import send_mail
+from django.contrib.auth.tokens import default_token_generator
+from django.conf import settings
 
 CATEGORY_MAPPING = {
     'Q11742': 'VALUES ?type { wd:Q11742 wd:Q22698 wd:Q126877 wd:Q1496967 } ?place wdt:P31 ?type.',
@@ -25,7 +29,7 @@ CATEGORY_MAPPING = {
 def index(request):
     return render(request,'map_app/index.html')
 
-@ensure_csrf_cookie
+@csrf_exempt
 def api_login(request):
     if request.method == 'POST':
         try:
@@ -269,7 +273,6 @@ def get_wikidata_places(request):
     
     wikidata_url = "https://query.wikidata.org/sparql"
     headers = {
-        # Замени на данные своего проекта, чтобы Wikidata не банила запросы
         'User-Agent': 'TouristMapApp/1.0 (konstantin@example.com)' 
     }
     params = {
@@ -304,3 +307,56 @@ def get_wikidata_places(request):
     except requests.exceptions.RequestException as e:
         print(f"Ошибка при запросе к Wikidata: {e}")
         return JsonResponse({'error': 'Ошибка сервера при получении данных'}, status=500)
+    
+# ЗАПРОС НА СБРОС
+@csrf_exempt
+def api_password_reset_request(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            email = data.get('email')
+            
+            user = User.objects.filter(email=email).first()
+            if user:
+                uid = urlsafe_base64_encode(force_bytes(user.pk))
+                token = default_token_generator.make_token(user)
+                reset_url = f"http://127.0.0.1:5173/reset-password-confirm/{uid}/{token}/"
+            
+                send_mail(
+                    subject="Восстановление пароля | TouristMap",
+                    message=f"Для сброса пароля перейдите по ссылке: {reset_url}",
+                    from_email=settings.DEFAULT_FROM_EMAIL, 
+                    recipient_list=[user.email],
+                    fail_silently=False,
+                )
+            
+            return JsonResponse({'status': 'ok', 'message': 'Инструкции отправлены на email'})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+# ПОДТВЕРЖДЕНИЕ СБРОСА
+@csrf_exempt
+def api_password_reset_confirm(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            uidb64 = data.get('uid')
+            token = data.get('token')
+            new_password = data.get('password')
+            
+            try:
+                uid = force_str(urlsafe_base64_decode(uidb64))
+                user = User.objects.get(pk=uid)
+            except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+                return JsonResponse({'status': 'error', 'message': 'Недействительная ссылка'}, status=400)
+            
+            # Проверяем валидность токена Django
+            if default_token_generator.check_token(user, token):
+                user.set_password(new_password)
+                user.save()
+                return JsonResponse({'status': 'ok', 'message': 'Пароль успешно изменен'})
+            else:
+                return JsonResponse({'status': 'error', 'message': 'Токен устарел или недействителен'}, status=400)
+                
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)

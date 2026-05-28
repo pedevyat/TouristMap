@@ -33,7 +33,7 @@
         <div class="sidebar-header p-4 d-flex align-items-center mb-4"> 
           <router-link to="/" class="d-flex align-items-center link-dark text-decoration-none">
             <img src="../assets/images/logo.png" width="40" class="me-2">
-            <span class="fs-5 fw-bold">Туристическая карта</span>
+            <span class="fs-5 fw-bold">ВикиТурист</span>
           </router-link>
         </div>
         

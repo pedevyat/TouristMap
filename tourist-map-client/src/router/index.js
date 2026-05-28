@@ -39,6 +39,16 @@ const routes = [
     name: 'VerifyEmail',
     component: () => import('@/views/VerifyEmailView.vue'),
     meta: { requiresAuth: false }
+  },
+  {
+    path: '/forgot-password',
+    name: 'ForgotPassword',
+    component: () => import('@/views/registration/ForgotPassword.vue'),
+  },
+  {
+    path: '/reset-password-confirm/:uid/:token',
+    name: 'reset-password-confirm',
+    component: () => import('@/views/registration/ResetPasswordConfirm.vue'),
   }
 ]
 

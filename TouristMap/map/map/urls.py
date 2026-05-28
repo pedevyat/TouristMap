@@ -30,4 +30,6 @@ urlpatterns = [
     path('api/register/', views.api_register, name='api_register'),
     path('api/favorites/', api_toggle_favorite, name='favorite-add'),
     path('api/verify-email/', views.api_verify_email, name='api_verify_email'),
+    path('api/password-reset/', views.api_password_reset_request, name='api_password_reset_request'),
+    path('api/password-reset-confirm/', views.api_password_reset_confirm, name='api_password_reset_confirm'),
 ]

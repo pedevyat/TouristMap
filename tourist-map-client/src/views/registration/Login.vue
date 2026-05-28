@@ -50,9 +50,9 @@
         <router-link :to="{ name: 'signup' }" class="btn btn-outline-success">
           Зарегистрироваться
         </router-link>
-        <a href="http://127.0.0.1:8000/accounts/password_reset/" class="btn btn-outline-danger">
-          Забыи пароль?
-        </a>
+        <router-link :to="{ name: 'ForgotPassword' }" class="btn btn-outline-danger">
+          Забыли пароль?
+        </router-link>
       </div>
     </div>
   </div>
@@ -85,18 +85,12 @@ const handleLogin = async () => {
   error.value = null;
 
   try {
-    // Получаем токен из кук вручную
-    const csrfToken = Cookies.get('csrftoken');
-
     const response = await axios.post('http://127.0.0.1:8000/api/login/', 
       {
         username: loginForm.username,
         password: loginForm.password
       },
       {
-        headers: {
-          'X-CSRFToken': csrfToken 
-        },
         withCredentials: true
       }
     );
@@ -109,7 +103,11 @@ const handleLogin = async () => {
     }
   } catch (err) {
     console.error(err.response);
-    error.value = 'Ошибка входа: проверьте логин или пароль';
+    if (err.response && err.response.data && err.response.data.message) {
+      error.value = err.response.data.message;
+    } else {
+      error.value = 'Ошибка входа: проверьте логин или пароль';
+    }
   } finally {
     isLoading.value = false;
   }
