@@ -177,12 +177,24 @@ const fetchFullInfo = async (qid) => {
           finalDescription = wikiExtract;
         }
       }
+
+      let formattedCoord = "";
+      const rawCoord = res.coord?.value; 
+      if (rawCoord) {
+        const match = rawCoord.match(/Point\(([^)]+)\)/);
+        if (match) {
+          formattedCoord = match[1].trim().replace(/\s+/, ', ');
+        } else {
+          formattedCoord = rawCoord;
+        }
+      }
+
       place.value = {
-        label: res.label?.value || "Без названия",
+        label: res.label?.value,
         description: finalDescription || "Описание отсутствует",
         image: res.image?.value,
-        coord: res.coord?.value || "Не указаны",
-        city: res.cityLabel?.value || "Неизвестно",
+        coord: formattedCoord,
+        city: res.cityLabel?.value,
         website: res.website?.value || null,
         wikipedia: res.wikipedia?.value || null
       };
