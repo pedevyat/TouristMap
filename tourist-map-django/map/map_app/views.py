@@ -18,7 +18,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.conf import settings
 
 CATEGORY_MAPPING = {
-    'Q11742': 'VALUES ?type { wd:Q11742 wd:Q22698 wd:Q126877 wd:Q1496967 } ?place wdt:P31 ?type.',
+    'Q11742': 'VALUES ?type { wd:Q11742 wd:Q22698 wd:Q126877 wd:Q1496967 wd:Q575759 } ?place wdt:P31 ?type.',
     'Q862454': 'VALUES ?type { wd:Q862454 wd:Q15631416 wd:Q3840711 } ?place wdt:P31 ?type.',
     'Q33506': 'VALUES ?type { wd:Q33506 wd:Q205391 wd:Q54173 wd:Q833017 wd:Q7075 } ?place wdt:P31 ?type.',
     'Q24354': 'VALUES ?type { wd:Q11635 wd:Q153562 wd:Q1060165 wd:Q47928 wd:Q11812394 wd:Q16889960 } ?place wdt:P31 ?type.',
