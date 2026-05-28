@@ -6,7 +6,6 @@
 import { onMounted, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { sendToggleFavoriteRequest } from '@/api/favoriteApi.js';
-// 1. Импортируем наш новый слой API
 import { placesApi } from '@/api/placesApi.js';
 
 const router = useRouter();

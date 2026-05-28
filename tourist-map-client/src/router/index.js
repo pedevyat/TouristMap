@@ -37,7 +37,7 @@ const routes = [
   {
     path: '/verify-email',
     name: 'VerifyEmail',
-    component: () => import('@/views/VerifyEmailView.vue'),
+    component: () => import('@/views/registration/VerifyEmailView.vue'),
     meta: { requiresAuth: false }
   },
   {

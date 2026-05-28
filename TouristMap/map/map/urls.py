@@ -32,4 +32,5 @@ urlpatterns = [
     path('api/verify-email/', views.api_verify_email, name='api_verify_email'),
     path('api/password-reset/', views.api_password_reset_request, name='api_password_reset_request'),
     path('api/password-reset-confirm/', views.api_password_reset_confirm, name='api_password_reset_confirm'),
+    path('api/places/rating/', views.api_place_rating, name='api_place_rating'),
 ]

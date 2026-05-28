@@ -3,7 +3,7 @@ from django.http import HttpResponse, JsonResponse
 from django.contrib.auth import authenticate, login, logout
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 import json
-from .models import Place, Favorite
+from .models import Place, Favorite, PlaceRating
 import re
 from django.contrib.gis.geos import Point
 from django.contrib.auth.models import User
@@ -360,3 +360,71 @@ def api_password_reset_confirm(request):
                 
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+        
+@csrf_exempt
+def api_place_rating(request):
+    """
+    Универсальный эндпоинт для получения и сохранения рейтинга объекта.
+    """
+    if request.method == 'GET':
+        qid = request.GET.get('qid')
+        if not qid:
+            return JsonResponse({'status': 'error', 'message': 'Отсутствует QID'}, status=400)
+            
+        place, _ = Place.objects.get_or_create(wikidata_id=qid)
+        
+        user_rating = 0
+        if request.user.is_authenticated:
+            rating_obj = PlaceRating.objects.filter(user=request.user, place=place).first()
+            if rating_obj:
+                user_rating = rating_obj.value
+                
+        return JsonResponse({
+            'status': 'ok',
+            'average_rating': place.rating,
+            'review_count': place.review_count,
+            'user_rating': user_rating
+        })
+        
+    elif request.method == 'POST':
+        if not request.user.is_authenticated:
+            return JsonResponse({'status': 'error', 'message': 'Пользователь не авторизован'}, status=401)
+            
+        try:
+            data = json.loads(request.body)
+            qid = data.get('qid')
+            value = int(data.get('value'))
+            name = data.get('name', '')
+            
+            if not qid or not (1 <= value <= 5):
+                return JsonResponse({'status': 'error', 'message': 'Некорректные данные'}, status=400)
+                
+            place, created = Place.objects.get_or_create(wikidata_id=qid)
+            if created and name:
+                place.name = name
+                place.save()
+                
+            PlaceRating.objects.update_or_create(
+                user=request.user,
+                place=place,
+                defaults={'value': value}
+            )
+            
+            all_ratings = place.ratings.all()
+            place.review_count = all_ratings.count()
+            if place.review_count > 0:
+                place.rating = round(sum(r.value for r in all_ratings) / place.review_count, 1)
+            else:
+                place.rating = 0.0
+            place.save()
+            
+            return JsonResponse({
+                'status': 'ok',
+                'average_rating': place.rating,
+                'review_count': place.review_count,
+                'user_rating': value
+            })
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+            
+    return JsonResponse({'status': 'error', 'message': 'Метод не поддерживается'}, status=405)

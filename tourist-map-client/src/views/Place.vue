@@ -18,10 +18,26 @@
                 <strong>Подробнее в Википедии</strong>
               </a>
           </li>
+          <div v-if="isAuthenticated" class="mt-3 mb-2 rating-interactive-block">
+            <strong class="text-black me-2">Оцените место:</strong>
+            <span v-for="star in 5" 
+                  :key="star" 
+                  @click="ratePlace(star)" 
+                  style="cursor: pointer; font-size: 26px; transition: color 0.15s ease-in-out;"
+                  :style="{ color: star <= userRating ? '#ffc107' : '#ccc' }"
+                  :title="'Поставить ' + star + ' из 5'">
+              ★
+            </span>
+          </div>
           <hr>
           <ul class="list-unstyled text-black">
             <li><strong>Город/регион:</strong> {{ place.city }}</li>
             <li><strong>Координаты:</strong> {{ place.coord }}</li>
+            <li class="mt-1 mb-1">
+              <strong>Рейтинг: </strong>  
+              <span class="fw-bold"> {{ averageRating > 0 ? averageRating.toFixed(1) : '0.0' }}</span> 
+              <span class="text-muted small"> ({{ reviewCount }})</span>
+            </li>
             <li v-if="place.website">
               <strong>Сайт:</strong> <a :href="place.website" target="_blank">Перейти</a>
             </li>
@@ -46,6 +62,78 @@ const place = ref(null);
 const isLoading = ref(true);
 const isAuthenticated = ref(false);
 const isFavorite = ref(false);
+const averageRating = ref(0.0);
+const reviewCount = ref(0);
+const userRating = ref(0);
+
+const getCookie = (name) => {
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== '') {
+    const cookies = document.cookie.split(';');
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === (name + '=')) {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+};
+
+// Загрузка статистики рейтинга из бэкенда
+const fetchRatingData = async (qid) => {
+  try {
+    const response = await fetch(`http://127.0.0.1:8000/api/places/rating/?qid=${qid}`, {
+      credentials: 'include'
+    });
+    if (response.ok) {
+      const data = await response.json();
+      averageRating.value = data.average_rating;
+      reviewCount.value = data.review_count;
+      userRating.value = data.user_rating; // Присвоит 0, если пользователь не оценивал
+    }
+  } catch (e) {
+    console.error("Не удалось загрузить данные рейтинга:", e);
+  }
+};
+
+// Отправка новой или измененной оценки
+const ratePlace = async (value) => {
+  const qid = route.params.id;
+  try {
+    const response = await fetch('http://127.0.0.1:8000/api/places/rating/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken')
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        qid: qid,
+        value: value,
+        name: place.value?.label || ''
+      })
+    });
+
+    if (response.status === 401) {
+      alert("Сессия истекла. Войдите в систему заново.");
+      isAuthenticated.value = false;
+      router.push({ name: 'login' });
+      return;
+    }
+
+    if (response.ok) {
+      const data = await response.json();
+      averageRating.value = data.average_rating;
+      reviewCount.value = data.review_count;
+      userRating.value = data.user_rating;
+    }
+  } catch (e) {
+    console.error("Ошибка при отправке оценки:", e);
+    alert("Не удалось сохранить оценку. Проверьте подключение к серверу.");
+  }
+};
 
 // Проверка авторизации и наличия текущего объекта в избранном
 const checkAuthAndFavoriteStatus = async (qid) => {
@@ -213,6 +301,7 @@ onMounted(() => {
   if (qid) {
     fetchFullInfo(qid);
     checkAuthAndFavoriteStatus(qid); // Параллельно запрашиваем статус избранного
+    fetchRatingData(qid); // загружаем данные рейтинга
   }
 });
 </script>
@@ -222,5 +311,9 @@ onMounted(() => {
   max-height: 100vh;
   overflow-y: auto;     
   overflow-x: hidden;   
+}
+
+.rating-interactive-block span:hover {
+  transform: scale(1.15);
 }
 </style>

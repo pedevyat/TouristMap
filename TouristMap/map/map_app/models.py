@@ -46,3 +46,15 @@ class Favorite(models.Model):
 
     def __str__(self):
         return f"{self.user.username} -> {self.wikidata_id}"
+    
+class PlaceRating(models.Model):
+    """Рейтинг места"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='place_ratings', verbose_name="Пользователь")
+    place = models.ForeignKey(Place, on_delete=models.CASCADE, related_name='ratings', verbose_name="Объект")
+    value = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)], verbose_name="Оценка")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('user', 'place') 
+        verbose_name = "Оценка пользователя"
+        verbose_name_plural = "Оценки пользователей"
