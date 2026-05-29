@@ -20,14 +20,6 @@ import Sidebar from './components/Sidebar.vue';
 
 const currentUser = ref(null);
 
-onMounted(async () => {
-  // Запрос к Django API: fetch('/api/user-info/')
-  // currentUser.value = await response.json();
-});
-
-const handleLogout = () => {
-  // Логика выхода
-};
 </script>
 
 <style>
