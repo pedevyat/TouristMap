@@ -22,7 +22,7 @@ export function getCookie(name) {
 export async function sendToggleFavoriteRequest(place) {
   const cityName = place.cityLabel ? place.cityLabel.value : "Неизвестно";
 
-  const response = await fetch('http://127.0.0.1:8000/api/favorites/', {
+  const response = await fetch('/api/toggle-favorite/', {
     method: 'POST',
     headers: { 
       'Content-Type': 'application/json', 

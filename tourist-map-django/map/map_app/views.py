@@ -16,6 +16,7 @@ from django.utils.encoding import force_bytes, force_str
 from django.core.mail import send_mail
 from django.contrib.auth.tokens import default_token_generator
 from django.conf import settings
+import math
 
 CATEGORY_MAPPING = {
     'Q11742': 'VALUES ?type { wd:Q11742 wd:Q22698 wd:Q126877 wd:Q1496967 wd:Q575759 } ?place wdt:P31 ?type.',
@@ -428,3 +429,86 @@ def api_place_rating(request):
             return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
             
     return JsonResponse({'status': 'error', 'message': 'Метод не поддерживается'}, status=405)
+
+@require_GET
+@cache_page(60 * 120) 
+def api_search_places(request):
+    """
+    Эндпоинт для поиска мест в определенном радиусе координат (вместо поиска на фронтенде).
+    Принимает GET-параметры: lat, lng, radius (по умолчанию 30).
+    """
+    lat_str = request.GET.get('lat')
+    lng_str = request.GET.get('lng')
+    radius_str = request.GET.get('radius', '30')
+
+    if not lat_str or not lng_str:
+        return JsonResponse({'error': 'Отсутствуют обязательные параметры lat и lng'}, status=400)
+
+    try:
+        lat = float(lat_str)
+        lng = float(lng_str)
+        radius_km = float(radius_str)
+    except ValueError:
+        return JsonResponse({'error': 'Параметры lat, lng и radius должны быть числами'}, status=400)
+
+    # Расчет Bounding Box 
+    lat_delta = radius_km / 111.0
+    # Предотвращаем деление на ноль у полюсов
+    cos_lat = math.cos(math.radians(lat)) if math.cos(math.radians(lat)) != 0 else 0.0001
+    lng_delta = radius_km / (111.32 * cos_lat)
+
+    box = {
+        'minLat': lat - lat_delta,
+        'maxLat': lat + lat_delta,
+        'minLng': lng - lng_delta,
+        'maxLng': lng + lng_delta
+    }
+
+    sparql_query = f"""
+    SELECT DISTINCT ?place ?placeLabel ?coord ?image ?description WHERE {{
+      VALUES ?type {{ 
+        wd:Q33506 wd:Q205391 wd:Q54173 wd:Q833017 wd:Q7075 # Музеи
+        wd:Q11742 wd:Q22698 wd:Q126877 wd:Q1496967          # Парки
+        wd:Q862454 wd:Q15631416 wd:Q3840711                 # Набережные
+        wd:Q11635 wd:Q153562 wd:Q1060165 wd:Q47928          # Культура
+        wd:Q8502                                            # Смотровые
+      }}
+      SERVICE wikibase:box {{
+        ?place wdt:P625 ?coord .
+        bd:serviceParam wikibase:cornerSouthWest "Point({box['minLng']} {box['minLat']})"^^geo:wktLiteral .
+        bd:serviceParam wikibase:cornerNorthEast "Point({box['maxLng']} {box['maxLat']})"^^geo:wktLiteral .
+      }}
+      ?place wdt:P31 ?type .
+      OPTIONAL {{ ?place wdt:P18 ?image . }}  
+      OPTIONAL {{ ?place schema:description ?description . FILTER(LANG(?description) = "ru") }}
+      FILTER NOT EXISTS {{ ?place wdt:P576 ?demolished. }}
+      SERVICE wikibase:label {{ bd:serviceParam wikibase:language "ru". }}
+    }} 
+    """
+
+    wikidata_url = "https://query.wikidata.org/sparql"
+    headers = {
+        'User-Agent': 'TouristMapApp/1.0 (kpinchuk@sfedu.ru)',
+        'Accept': 'application/json'
+    }
+    params = {
+        'query': sparql_query,
+        'format': 'json'
+    }
+
+    try:
+        response = requests.get(wikidata_url, params=params, headers=headers, timeout=25)
+        
+        if response.status_code == 429:
+            return JsonResponse({'error': 'Слишком много запросов к Wikidata. Повторите позже.'}, status=429)
+            
+        response.raise_for_status()
+        raw_data = response.json()
+        
+        bindings = raw_data.get('results', {}).get('bindings', [])
+        
+        return JsonResponse(bindings, safe=False, json_dumps_params={'ensure_ascii': False})
+
+    except requests.exceptions.RequestException as e:
+        print(f"Ошибка запроса к Wikidata на сервере: {e}")
+        return JsonResponse({'error': 'Не удалось получить данные от Wikidata. Попробуйте позже.'}, status=500)

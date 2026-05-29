@@ -46,7 +46,7 @@
     <div class="flex-grow-1 pe-2" v-if="places.length > 0">
       <div class="row row-cols-1 row-cols-md-3 g-4 pb-4">
         <div class="col" v-for="item in places" :key="item.id">
-          <div class="card h-100 shadow-sm border-0">
+          <div class="card h-100 shadow-sm border-0 place-card">
             <img 
               :src="item.image" 
               class="card-img-top" 
@@ -59,12 +59,27 @@
               
               <div class="mt-2 d-flex justify-content-between align-items-center">
                 <span class="badge bg-secondary opacity-75">{{ item.distance }} км</span>
-                <router-link 
-                  :to="{ name: 'Place', params: { id: item.id }}" 
-                  class="btn btn-sm btn-outline-primary"
-                >
-                  Подробнее
-                </router-link>
+                
+                <div class="d-flex align-items-center gap-2">
+                  <button 
+                    @click="toggleFavorite(item)" 
+                    class="btn btn-star-favorite"
+                    :class="{ 'is-active': item.isFavorite }"
+                    title="Добавить в избранное"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" :fill="item.isFavorite ? '#ffc107' : 'none'" :stroke="item.isFavorite ? '#ffc107' : '#ccc'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                    </svg>
+                  </button>
+
+                  <router-link 
+                    :to="{ name: 'Place', params: { id: item.id }}" 
+                    class="btn btn-sm btn-outline-primary"
+                  >
+                    Подробнее
+                  </router-link>
+                </div>
+
               </div>
             </div>
           </div>
@@ -77,6 +92,7 @@
 
 <script setup>
 import { ref, onActivated, onDeactivated } from 'vue';
+import { sendToggleFavoriteRequest } from '@/api/favoriteApi'; 
 
 const cityQuery = ref('');
 const places = ref([]);
@@ -84,7 +100,6 @@ const isLoading = ref(false);
 const statusMessage = ref('');
 const scrollPosition = ref(0);
 
-// Срабатывает, когда пользователь вернулся на эту страницу
 onActivated(() => {
   window.scrollTo({
     top: scrollPosition.value,
@@ -92,7 +107,6 @@ onActivated(() => {
   });
 });
 
-// Срабатывает, когда пользователь уходит с этой страницы
 onDeactivated(() => {
   scrollPosition.value = window.scrollY || window.pageYOffset;
 });
@@ -122,95 +136,116 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   return R * c;
 };
 
-// Расчет углов
-const getBoundingBox = (lat, lng, radiusInKm = 30) => {
-  const latDelta = radiusInKm / 111;
-  const lngDelta = radiusInKm / (111.32 * Math.cos(lat * Math.PI / 180));
-  return {
-    minLat: lat - latDelta,
-    maxLat: lat + latDelta,
-    minLng: lng - lngDelta,
-    maxLng: lng + lngDelta
-  };
+// Запрос к Wikidata через Django Бэкенд 
+const fetchPlacesInRadius = async (lat, lng, radiusInKm = 30) => {
+  const url = `/api/search-places/?lat=${lat}&lng=${lng}&radius=${radiusInKm}`;
+  
+  const response = await fetch(url);
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error || `Ошибка сервера: ${response.status}`);
+  }
+  
+  return await response.json(); 
 };
 
-// Запрос к Wikidata
-const fetchPlacesInRadius = async (lat, lng, radiusInKm = 30) => {
-  const box = getBoundingBox(lat, lng, radiusInKm);
-  const query = `
-    SELECT DISTINCT ?place ?placeLabel ?coord ?image ?description WHERE {
-      # 1. Сначала объявляем типы, которые мы ищем, чтобы оптимизировать выборку
-      VALUES ?type { 
-        wd:Q33506 wd:Q205391 wd:Q54173 wd:Q833017 wd:Q7075 # Музеи
-        wd:Q11742 wd:Q22698 wd:Q126877 wd:Q1496967          # Парки
-        wd:Q862454 wd:Q15631416 wd:Q3840711                 # Набережные
-        wd:Q11635 wd:Q153562 wd:Q1060165 wd:Q47928          # Культура
-        wd:Q8502                                            # Смотровые
-      }
-      
-      # 2. Ищем объекты заданных типов строго внутри указанного квадрата
-      SERVICE wikibase:box {
-        ?place wdt:P625 ?coord .
-        bd:serviceParam wikibase:cornerSouthWest "Point(${box.minLng} ${box.minLat})"^^geo:wktLiteral .
-        bd:serviceParam wikibase:cornerNorthEast "Point(${box.maxLng} ${box.maxLat})"^^geo:wktLiteral .
-      }
-      
-      # Фильтруем по типу
-      ?place wdt:P31 ?type .
-      
-      # 3. Делаем картинку OPTIONAL, чтобы отсутствие фото не ломало и не замедляло запрос
-      OPTIONAL { ?place wdt:P18 ?image . }  
-      
-      OPTIONAL { ?place schema:description ?description . FILTER(LANG(?description) = "ru") }
-      FILTER NOT EXISTS { ?place wdt:P576 ?demolished. }
-      
-      SERVICE wikibase:label { bd:serviceParam wikibase:language "ru". }
+// Получение списка текущих QID в избранном у пользователя
+const getUserFavoriteIds = async () => {
+  try {
+    const response = await fetch('/api/toggle-favorite/');
+    
+    // Проверяем, что сервер вернул именно JSON, а не HTML страницу ошибки
+    const contentType = response.headers.get("content-type");
+    if (response.ok && contentType && contentType.includes("application/json")) {
+      const favs = await response.json();
+      return favs.map(f => f.id);
+    } else {
+      console.error("Сервер вернул некорректный ответ или ошибку:", response.status);
     }
-  `;
-  const url = "https://query.wikidata.org/sparql";
-  const params = new URLSearchParams({ query: query, format: 'json' });
-  
-  const response = await fetch(`${url}?${params}`);
-  if (!response.ok) throw new Error(`Ошибка сервера Wikidata: ${response.status}`);
-  
-  const data = await response.json();
-  return data.results.bindings;
+  } catch (e) {
+    console.error("Не удалось загрузить избранное пользователя:", e);
+  }
+  return [];
+};
+
+// Переключение статуса избранного
+const toggleFavorite = async (item) => {
+  try {
+    const res = await sendToggleFavoriteRequest(item.rawWikidata);
+
+    if (res.status === 401) {
+      alert('Для добавления в избранное необходимо авторизоваться.');
+      return;
+    }
+
+    if (res.ok && res.data) {
+      if (res.data.status === 'added') {
+        item.isFavorite = true;
+      } else if (res.data.status === 'removed') {
+        item.isFavorite = false;
+      }
+    }
+  } catch (error) {
+    console.error("Ошибка при изменении статуса избранного:", error);
+  }
 };
 
 const processCoordinatesSearch = async (lat, lng, radiusInKm = 30) => {
   statusMessage.value = `Ищем интересные места в радиусе ${radiusInKm} км...`;
   
-  const rawData = await fetchPlacesInRadius(lat, lng, radiusInKm);
-  
-  const filtered = [];
-  for (const item of rawData) {
-    if (!item.coord?.value) continue;
+  try {
+    const rawData = await fetchPlacesInRadius(lat, lng, radiusInKm);
+    const favoriteIds = await getUserFavoriteIds();
     
-    const match = item.coord.value.match(/Point\(([-\d.]+)\s+([-\d.]+)\)/);
-    if (match) {
-      const itemLng = parseFloat(match[1]);
-      const itemLat = parseFloat(match[2]);
+    const filtered = [];
+    for (const item of rawData) {
+      if (!item || !item.coord || !item.coord.value) continue;
       
-      const distance = calculateDistance(lat, lng, itemLat, itemLng);
-      
-      if (distance <= radiusInKm) {
-        filtered.push({
-          id: item.place.value.split('/').pop(),
-          name: item.placeLabel?.value || 'Без названия',
-          image: item.image?.value || 'https://placehold.co/600x400?text=Нет+фото',
-          distance: distance.toFixed(1)
-        });
+      const match = item.coord.value.match(/Point\(([-\d.]+)\s+([-\d.]+)\)/);
+      if (match) {
+        const itemLng = parseFloat(match[1]);
+        const itemLat = parseFloat(match[2]);
+        
+        const distance = calculateDistance(lat, lng, itemLat, itemLng);
+        
+        if (distance <= radiusInKm) {
+          let secureImageUrl = 'https://placehold.co/600x400?text=Нет+фото';
+          if (item.image && item.image.value) {
+            secureImageUrl = item.image.value.replace(/^http:\/\//i, 'https://');
+          }
+
+          const qid = item.place && item.place.value ? item.place.value.split('/').pop() : Math.random().toString();
+          if (!item.cityLabel) {
+            item.cityLabel = { value: cityQuery.value || "Неизвестно" };
+          }
+
+          filtered.push({
+            id: qid,
+            name: item.placeLabel && item.placeLabel.value ? item.placeLabel.value : 'Без названия',
+            description: item.description && item.description.value ? item.description.value : ' ',
+            image: secureImageUrl,
+            distance: distance.toFixed(1),
+            isFavorite: favoriteIds.includes(qid),
+            
+            // Сохраняем исходный объект Wikidata, чтобы его прочитала sendToggleFavoriteRequest
+            rawWikidata: item 
+          });
+        }
       }
     }
-  }
 
-  filtered.sort((a, b) => a.distance - b.distance);
-  places.value = filtered;
+    filtered.sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
+    places.value = filtered;
 
-  if (places.value.length === 0) {
-    statusMessage.value = `Ничего не найдено`;
-  } else {
-    statusMessage.value = `Успешно найдено мест: ${places.value.length}`;
+    if (places.value.length === 0) {
+      statusMessage.value = `Ничего не найдено`;
+    } else {
+      statusMessage.value = `Успешно найдено мест: ${places.value.length}`;
+    }
+  } catch (error) {
+    console.error("Ошибка при обработке результатов поиска:", error);
+    statusMessage.value = error.message || 'Ошибка при поиске мест.';
+    throw error;
   }
 };
 
@@ -275,7 +310,6 @@ const searchByGeolocation = () => {
 };
 </script>
 
-
 <style scoped>
 .scroll-container {
   overflow-y: auto;     
@@ -294,5 +328,24 @@ const searchByGeolocation = () => {
 }
 .scroll-container::-webkit-scrollbar-thumb:hover {
   background-color: #aaa;
+}
+
+.btn-star-favorite {
+  background: none;
+  border: none;
+  padding: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.btn-star-favorite:hover {
+  transform: scale(1.15);
+}
+
+.btn-star-favorite svg {
+  transition: fill 0.2s ease, stroke 0.2s ease;
 }
 </style>
