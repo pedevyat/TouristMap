@@ -249,7 +249,7 @@ def api_toggle_favorite(request):
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
         
 @require_GET
-@cache_page(60 * 60 * 24)
+@cache_page(60 * 60 * 24 * 7)
 def get_wikidata_places(request):
     class_qid = request.GET.get('classQID')
     
